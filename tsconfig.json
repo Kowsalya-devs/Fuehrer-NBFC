@@ -1,0 +1,79 @@
+// tsconfig.json
+{
+    "compilerOptions": {
+        // ── Output ───────────────────────────────────────────────────────────────
+        "target": "ES2022",
+        "module": "CommonJS",
+        "lib": [
+            "ES2022"
+        ],
+        "outDir": "./dist",
+        "rootDir": "./src",
+        // ── Module resolution ─────────────────────────────────────────────────────
+        "moduleResolution": "node",
+        "baseUrl": ".",
+        // The @/ alias — maps to src/ so imports never use ../../../
+        // Works with tsconfig-paths at runtime and jest moduleNameMapper in tests
+        "paths": {
+            "@/*": [
+                "src/*"
+            ]
+        },
+        "resolveJsonModule": true, // Allow import of .json files
+        "esModuleInterop": true, // Fixes default imports from CommonJS modules
+        "allowSyntheticDefaultImports": true,
+        // ── Strict mode — all flags on ────────────────────────────────────────────
+        // These are non-negotiable for a financial application
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true,
+        "strictBindCallApply": true,
+        "strictPropertyInitialization": true,
+        "noImplicitThis": true,
+        "alwaysStrict": true,
+        // ── Additional strictness ─────────────────────────────────────────────────
+        "noUnusedLocals": true, // Catch dead code early
+        "noUnusedParameters": true, // No unused function params
+        "noImplicitReturns": true, // All code paths must return
+        "noFallthroughCasesInSwitch": true, // No accidental switch fallthrough
+        "exactOptionalPropertyTypes": true, // undefined !== missing key
+        "noUncheckedIndexedAccess": true, // array[i] is T | undefined
+        // ── Declaration files ─────────────────────────────────────────────────────
+        "declaration": true, // Generate .d.ts files alongside .js
+        "declarationMap": true, // Source maps for .d.ts
+        "sourceMap": true, // Source maps for debugging in production
+        // ── Type roots ────────────────────────────────────────────────────────────
+        // Tell TypeScript to look for global type augmentations in src/types/
+        "typeRoots": [
+            "./node_modules/@types",
+            "./src/types"
+        ],
+        "types": [
+            "node",
+            "jest"
+        ],
+        // ── Decorators (if needed for Prisma / future DI) ─────────────────────────
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        // ── Misc ──────────────────────────────────────────────────────────────────
+        "skipLibCheck": true, // Don't type-check node_modules
+        "forceConsistentCasingInFileNames": true,
+        "removeComments": false // Keep comments in output for audit readability
+    },
+    // ── Included files ──────────────────────────────────────────────────────────
+    "include": [
+        "src/**/*.ts",
+        "src/**/*.d.ts", // Picks up express.d.ts and environment.d.ts
+        "config/**/*.ts",
+        "scripts/**/*.ts"
+    ],
+    // ── Excluded files ──────────────────────────────────────────────────────────
+    "exclude": [
+        "node_modules",
+        "dist",
+        "tests/**/*.ts", // Tests have their own tsconfig below
+        "**/*.spec.ts",
+        "**/*.test.ts"
+    ]
+}
