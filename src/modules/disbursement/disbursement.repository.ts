@@ -48,172 +48,172 @@ export const disbursementRepository = {
     // Written before the payout call — ensures we have an audit trail even if
     // the API call hangs or times out
 
-    async create(data: Omit
-    DisbursementRecord,
-    | 'id'
-    | 'loanAccountId'
-    | 'razorpayPayoutId'
-    | 'utrNumber'
-    | 'completedAt'
-    | 'failureReason'
-    | 'createdAt'
-    | 'updatedAt'
-  >): Promise<DisbursementRecord>{
-    const row = await prisma.disbursements.create({
-        data: {
-            loan_id: data.loanId,
-            loan_account_id: null,
-            user_id: data.userId,
-            beneficiary_name: data.beneficiaryName,
-            account_number: data.accountNumber,
-            ifsc: data.ifsc,
-            mode: data.mode,
-            principal_amount: data.principalAmount,
-            processing_fee: data.processingFee,
-            processing_fee_gst: data.processingFeeGst,
-            net_disbursed_amount: data.netDisbursedAmount,
-            status: data.status,
-            initiated_by: data.initiatedBy,
-            initiated_at: data.initiatedAt,
-            created_at: new Date(),
-            updated_at: new Date(),
-        },
-    });
+    async create(data: Omit<
+        DisbursementRecord,
+        | 'id'
+        | 'loanAccountId'
+        | 'razorpayPayoutId'
+        | 'utrNumber'
+        | 'completedAt'
+        | 'failureReason'
+        | 'createdAt'
+        | 'updatedAt'
+    >): Promise<DisbursementRecord> {
+        const row = await prisma.disbursements.create({
+            data: {
+                loan_id: data.loanId,
+                loan_account_id: null,
+                user_id: data.userId,
+                beneficiary_name: data.beneficiaryName,
+                account_number: data.accountNumber,
+                ifsc: data.ifsc,
+                mode: data.mode,
+                principal_amount: data.principalAmount,
+                processing_fee: data.processingFee,
+                processing_fee_gst: data.processingFeeGst,
+                net_disbursed_amount: data.netDisbursedAmount,
+                status: data.status,
+                initiated_by: data.initiatedBy,
+                initiated_at: data.initiatedAt,
+                created_at: new Date(),
+                updated_at: new Date(),
+            },
+        });
 
-    log.info('Disbursement record created', {
-        id: row.id,
-        loanId: data.loanId,
-        amount: data.netDisbursedAmount,
-    });
+        log.info('Disbursement record created', {
+            id: row.id,
+            loanId: data.loanId,
+            amount: data.netDisbursedAmount,
+        });
 
-    return mapRecord(row as unknown as Record<string, unknown>);
-},
+        return mapRecord(row as unknown as Record<string, unknown>);
+    },
 
     // ── Find ──────────────────────────────────────────────────────────────────
 
-    async findById(id: string): Promise < DisbursementRecord | null > {
+    async findById(id: string): Promise<DisbursementRecord | null> {
         const row = await prisma.disbursements.findUnique({ where: { id } });
         return row ? mapRecord(row as unknown as Record<string, unknown>) : null;
     },
 
-        async findByIdOrThrow(id: string): Promise < DisbursementRecord > {
-            const record = await this.findById(id);
-            if(!record) throw new NotFoundError('Disbursement', id);
-            return record;
-        },
+    async findByIdOrThrow(id: string): Promise<DisbursementRecord> {
+        const record = await this.findById(id);
+        if (!record) throw new NotFoundError('Disbursement', id);
+        return record;
+    },
 
-            async findByLoanId(loanId: string): Promise < DisbursementRecord | null > {
-                const row = await prisma.disbursements.findFirst({
-                    where: { loan_id: loanId },
-                    orderBy: { created_at: 'desc' },
-                });
-                return row ? mapRecord(row as unknown as Record<string, unknown>) : null;
+    async findByLoanId(loanId: string): Promise<DisbursementRecord | null> {
+        const row = await prisma.disbursements.findFirst({
+            where: { loan_id: loanId },
+            orderBy: { created_at: 'desc' },
+        });
+        return row ? mapRecord(row as unknown as Record<string, unknown>) : null;
+    },
+
+    async findByPayoutId(
+        razorpayPayoutId: string,
+    ): Promise<DisbursementRecord | null> {
+        const row = await prisma.disbursements.findFirst({
+            where: { razorpay_payout_id: razorpayPayoutId },
+        });
+        return row ? mapRecord(row as unknown as Record<string, unknown>) : null;
+    },
+
+    async existsCompletedForLoan(loanId: string): Promise<boolean> {
+        const count = await prisma.disbursements.count({
+            where: {
+                loan_id: loanId,
+                status: { in: ['COMPLETED', 'IN_TRANSIT', 'INITIATED'] },
             },
+        });
+        return count > 0;
+    },
 
-                async findByPayoutId(
-                    razorpayPayoutId: string,
-                ): Promise < DisbursementRecord | null > {
-                    const row = await prisma.disbursements.findFirst({
-                        where: { razorpay_payout_id: razorpayPayoutId },
-                    });
-                    return row ? mapRecord(row as unknown as Record<string, unknown>) : null;
-                },
+    // ── Status transitions ─────────────────────────────────────────────────────
 
-                    async existsCompletedForLoan(loanId: string): Promise < boolean > {
-                        const count = await prisma.disbursements.count({
-                            where: {
-                                loan_id: loanId,
-                                status: { in: ['COMPLETED', 'IN_TRANSIT', 'INITIATED'] },
-                            },
-                        });
-                        return count > 0;
-                    },
+    async markInitiated(
+        id: string,
+        razorpayPayoutId: string,
+    ): Promise<DisbursementRecord> {
+        const row = await prisma.disbursements.update({
+            where: { id },
+            data: {
+                status: 'INITIATED',
+                razorpay_payout_id: razorpayPayoutId,
+                updated_at: new Date(),
+            },
+        });
+        return mapRecord(row as unknown as Record<string, unknown>);
+    },
 
-                        // ── Status transitions ─────────────────────────────────────────────────────
+    async markInTransit(
+        id: string,
+        razorpayPayoutId: string,
+    ): Promise<DisbursementRecord> {
+        const row = await prisma.disbursements.update({
+            where: { id },
+            data: {
+                status: 'IN_TRANSIT',
+                razorpay_payout_id: razorpayPayoutId,
+                updated_at: new Date(),
+            },
+        });
+        return mapRecord(row as unknown as Record<string, unknown>);
+    },
 
-                        async markInitiated(
-                            id: string,
-                            razorpayPayoutId: string,
-                        ): Promise < DisbursementRecord > {
-                            const row = await prisma.disbursements.update({
-                                where: { id },
-                                data: {
-                                    status: 'INITIATED',
-                                    razorpay_payout_id: razorpayPayoutId,
-                                    updated_at: new Date(),
-                                },
-                            });
-                            return mapRecord(row as unknown as Record<string, unknown>);
-                        },
+    // ── Completion — atomic: set UTR + link loanAccountId together ────────────
 
-                            async markInTransit(
-                                id: string,
-                                razorpayPayoutId: string,
-                            ): Promise < DisbursementRecord > {
-                                const row = await prisma.disbursements.update({
-                                    where: { id },
-                                    data: {
-                                        status: 'IN_TRANSIT',
-                                        razorpay_payout_id: razorpayPayoutId,
-                                        updated_at: new Date(),
-                                    },
-                                });
-                                return mapRecord(row as unknown as Record<string, unknown>);
-                            },
+    async markCompleted(
+        id: string,
+        utrNumber: string,
+        loanAccountId: string,
+    ): Promise<DisbursementRecord> {
+        const row = await prisma.disbursements.update({
+            where: { id },
+            data: {
+                status: 'COMPLETED',
+                utr_number: utrNumber,
+                loan_account_id: loanAccountId,
+                completed_at: new Date(),
+                updated_at: new Date(),
+            },
+        });
 
-                                // ── Completion — atomic: set UTR + link loanAccountId together ────────────
+        log.info('Disbursement completed', {
+            id,
+            loanAccountId,
+            utrNumber,
+        });
 
-                                async markCompleted(
-                                    id: string,
-                                    utrNumber: string,
-                                    loanAccountId: string,
-                                ): Promise < DisbursementRecord > {
-                                    const row = await prisma.disbursements.update({
-                                        where: { id },
-                                        data: {
-                                            status: 'COMPLETED',
-                                            utr_number: utrNumber,
-                                            loan_account_id: loanAccountId,
-                                            completed_at: new Date(),
-                                            updated_at: new Date(),
-                                        },
-                                    });
+        return mapRecord(row as unknown as Record<string, unknown>);
+    },
 
-                                    log.info('Disbursement completed', {
-                                        id,
-                                        loanAccountId,
-                                        utrNumber,
-                                    });
+    async markFailed(
+        id: string,
+        reason: string,
+    ): Promise<DisbursementRecord> {
+        const row = await prisma.disbursements.update({
+            where: { id },
+            data: {
+                status: 'FAILED',
+                failure_reason: reason,
+                updated_at: new Date(),
+            },
+        });
 
-                                    return mapRecord(row as unknown as Record<string, unknown>);
-                                },
+        log.warn('Disbursement failed', { id, reason });
 
-                                    async markFailed(
-                                        id: string,
-                                        reason: string,
-                                    ): Promise < DisbursementRecord > {
-                                        const row = await prisma.disbursements.update({
-                                            where: { id },
-                                            data: {
-                                                status: 'FAILED',
-                                                failure_reason: reason,
-                                                updated_at: new Date(),
-                                            },
-                                        });
+        return mapRecord(row as unknown as Record<string, unknown>);
+    },
 
-                                        log.warn('Disbursement failed', { id, reason });
-
-                                        return mapRecord(row as unknown as Record<string, unknown>);
-                                    },
-
-                                        async markReversed(id: string): Promise < DisbursementRecord > {
-                                            const row = await prisma.disbursements.update({
-                                                where: { id },
-                                                data: {
-                                                    status: 'REVERSED',
-                                                    updated_at: new Date(),
-                                                },
-                                            });
-                                            return mapRecord(row as unknown as Record<string, unknown>);
-                                        },
+    async markReversed(id: string): Promise<DisbursementRecord> {
+        const row = await prisma.disbursements.update({
+            where: { id },
+            data: {
+                status: 'REVERSED',
+                updated_at: new Date(),
+            },
+        });
+        return mapRecord(row as unknown as Record<string, unknown>);
+    },
 };

@@ -342,9 +342,9 @@ export const loansRepository = {
             Date.now() - overdueDaysThreshold * 24 * 60 * 60 * 1000,
         );
 
-        const rows = await prisma.$queryRaw
-        Array < { loan_account_id: string; user_id: string; overdue_days: number } >
-    > `
+        const rows = await prisma.$queryRaw<
+            Array<{ loan_account_id: string; user_id: string; overdue_days: number }>
+        > `
       SELECT
         la.id           AS loan_account_id,
         la.user_id,

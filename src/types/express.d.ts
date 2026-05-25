@@ -24,7 +24,10 @@ declare global {
             startTime: [number, number]; // process.hrtime() — for response time calculation
 
             // ── Attached by verifyToken middleware ────────────────────────────────
-            // Present on all protected routes (after verifyToken runs)
+            // Present on all protected routes (after verifyToken runs).
+            // Marked optional here because Express's base Request has no `user`.
+            // Use AuthRequest (below) or getAuthUser() in protected route handlers
+            // to access this as a guaranteed non-undefined value.
             user?: AuthenticatedUser;
 
             // ── Attached by validate middleware ───────────────────────────────────
@@ -114,10 +117,32 @@ export function getValidatedParams<T>(req: Request): T {
     return req.validatedParams as T;
 }
 
-// ─── Authenticated request type alias ─────────────────────────────────────────
-// Use this in controllers that sit behind verifyToken middleware
-// It narrows req.user from optional to required — no optional chaining needed
+// ─── Authenticated user accessor ───────────────────────────────────────────────
+// Returns the typed user attached by verifyToken middleware.
+// Throws at runtime if called on a route that does not sit behind verifyToken —
+// this is intentional: such a call would be a programming error, not a user error.
+//
+// Use in controllers: const user = getAuthUser(req);
 
-export type AuthRequest = Request & {
+export function getAuthUser(req: Request): AuthenticatedUser {
+    if (req.user === undefined) {
+        throw new Error(
+            'getAuthUser called before verifyToken middleware ran. ' +
+            'Ensure the verifyToken() middleware is applied to this route.',
+        );
+    }
+    return req.user;
+}
+
+// ─── Authenticated request type alias ─────────────────────────────────────────
+// Use this in controllers that sit behind verifyToken middleware.
+// It narrows req.user from optional to required — no optional chaining needed.
+//
+// IMPORTANT: This uses Omit + intersection (not a plain `&`) so that Express's
+// RequestHandler overload accepts AuthRequest handlers. A plain intersection
+// produces `user: AuthenticatedUser | undefined & AuthenticatedUser` which
+// TypeScript treats as incompatible with the base Request's optional `user`.
+
+export type AuthRequest = Omit<Request, 'user'> & {
     user: AuthenticatedUser;
 };

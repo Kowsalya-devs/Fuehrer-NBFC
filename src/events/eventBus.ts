@@ -272,150 +272,150 @@ class TypedEventBus {
     private readonly emitter: EventEmitter;
 
     // Track registered listeners for graceful shutdown + debugging
-    private readonly registry: Map
-    AppEventName,
-    Array<{ name: string; fn: Listener<AppEventName> }>
-  > = new Map();
+    private readonly registry: Map<
+        AppEventName,
+        Array<{ name: string; fn: Listener<AppEventName> }>
+    > = new Map();
 
-constructor() {
-    this.emitter = new EventEmitter();
-    // Raise the limit — we have many listeners across modules
-    this.emitter.setMaxListeners(50);
-}
+    constructor() {
+        this.emitter = new EventEmitter();
+        // Raise the limit — we have many listeners across modules
+        this.emitter.setMaxListeners(50);
+    }
 
-// ── on ───────────────────────────────────────────────────────────────────
-// Register a named listener. The name is used for logging and debugging.
-// Errors thrown inside listeners are caught and logged — they never
-// propagate back to the emitter and never crash the request.
+    // ── on ───────────────────────────────────────────────────────────────────
+    // Register a named listener. The name is used for logging and debugging.
+    // Errors thrown inside listeners are caught and logged — they never
+    // propagate back to the emitter and never crash the request.
 
-on<E extends AppEventName>(
-    event: E,
-    name: string,
-    listener: Listener<E>,
-): void {
-    const wrapped = async (payload: AppEventPayload<E>): Promise<void> => {
-        const start = Date.now();
-        try {
-            await listener(payload);
-            log.debug('Event listener completed', {
-                event,
-                listener: name,
-                durationMs: Date.now() - start,
-            });
-        } catch (err) {
-            // Listener failure must never affect the primary request flow
-            log.error('Event listener threw an error', {
-                event,
-                listener: name,
-                error: (err as Error).message,
-                stack: (err as Error).stack,
-                payload,
-            });
+    on<E extends AppEventName>(
+        event: E,
+        name: string,
+        listener: Listener<E>,
+    ): void {
+        const wrapped = async (payload: AppEventPayload<E>): Promise<void> => {
+            const start = Date.now();
+            try {
+                await listener(payload);
+                log.debug('Event listener completed', {
+                    event,
+                    listener: name,
+                    durationMs: Date.now() - start,
+                });
+            } catch (err) {
+                // Listener failure must never affect the primary request flow
+                log.error('Event listener threw an error', {
+                    event,
+                    listener: name,
+                    error: (err as Error).message,
+                    stack: (err as Error).stack,
+                    payload,
+                });
+            }
+        };
+
+        this.emitter.on(event, wrapped as (...args: unknown[]) => void);
+
+        // Register in the registry for introspection
+        if (!this.registry.has(event)) {
+            this.registry.set(event, []);
         }
-    };
+        this.registry.get(event)!.push({
+            name,
+            fn: listener as Listener<AppEventName>,
+        });
 
-    this.emitter.on(event, wrapped as (...args: unknown[]) => void);
+        log.debug('Event listener registered', { event, listener: name });
+    }
 
-    // Register in the registry for introspection
-    if(!this.registry.has(event)) {
-    this.registry.set(event, []);
-}
-this.registry.get(event)!.push({
-    name,
-    fn: listener as Listener<AppEventName>,
-});
+    // ── once ─────────────────────────────────────────────────────────────────
+    // Register a one-time listener — fires once then auto-removes.
+    // Useful for tests and one-off coordination between modules.
 
-log.debug('Event listener registered', { event, listener: name });
-  }
+    once<E extends AppEventName>(
+        event: E,
+        name: string,
+        listener: Listener<E>,
+    ): void {
+        const wrapped = async (payload: AppEventPayload<E>): Promise<void> => {
+            try {
+                await listener(payload);
+            } catch (err) {
+                log.error('One-time event listener threw an error', {
+                    event,
+                    listener: name,
+                    error: (err as Error).message,
+                });
+            }
+        };
 
-// ── once ─────────────────────────────────────────────────────────────────
-// Register a one-time listener — fires once then auto-removes.
-// Useful for tests and one-off coordination between modules.
+        this.emitter.once(event, wrapped as (...args: unknown[]) => void);
+        log.debug('One-time event listener registered', { event, listener: name });
+    }
 
-once<E extends AppEventName>(
-    event: E,
-    name: string,
-    listener: Listener<E>,
-): void {
-    const wrapped = async (payload: AppEventPayload<E>): Promise<void> => {
-        try {
-            await listener(payload);
-        } catch (err) {
-            log.error('One-time event listener threw an error', {
-                event,
-                listener: name,
-                error: (err as Error).message,
-            });
+    // ── emit ─────────────────────────────────────────────────────────────────
+    // Fire an event. All registered async listeners run concurrently.
+    // If no listeners are registered, the event is silently dropped — this is
+    // intentional. Emitting an event is a fire-and-forget side effect.
+
+    emit<E extends AppEventName>(
+        event: E,
+        payload: AppEventPayload<E>,
+    ): void {
+        const listenerCount = this.emitter.listenerCount(event);
+
+        log.debug('Emitting event', {
+            event,
+            listenerCount,
+        });
+
+        // setImmediate defers emission to the next iteration of the event loop.
+        // This ensures the primary business operation (DB write, response) completes
+        // BEFORE listeners run — critical for audit logs and notifications.
+        setImmediate(() => {
+            this.emitter.emit(event, payload);
+        });
+    }
+
+    // ── emitSync ─────────────────────────────────────────────────────────────
+    // Synchronous emit — listeners run in the current event loop tick.
+    // Only use when the calling code explicitly needs to wait for listeners.
+    // Prefer emit() for all normal use cases.
+
+    emitSync<E extends AppEventName>(
+        event: E,
+        payload: AppEventPayload<E>,
+    ): void {
+        this.emitter.emit(event, payload);
+    }
+
+    // ── off ──────────────────────────────────────────────────────────────────
+
+    off<E extends AppEventName>(
+        event: E,
+        listener: Listener<E>,
+    ): void {
+        this.emitter.off(event, listener as (...args: unknown[]) => void);
+    }
+
+    // ── Introspection ─────────────────────────────────────────────────────────
+
+    listenerCount(event: AppEventName): number {
+        return this.emitter.listenerCount(event);
+    }
+
+    registeredListeners(): Record<string, string[]> {
+        const result: Record<string, string[]> = {};
+        for (const [event, listeners] of this.registry.entries()) {
+            result[event] = listeners.map((l) => l.name);
         }
-    };
+        return result;
+    }
 
-    this.emitter.once(event, wrapped as (...args: unknown[]) => void);
-    log.debug('One-time event listener registered', { event, listener: name });
-}
-
-// ── emit ─────────────────────────────────────────────────────────────────
-// Fire an event. All registered async listeners run concurrently.
-// If no listeners are registered, the event is silently dropped — this is
-// intentional. Emitting an event is a fire-and-forget side effect.
-
-emit<E extends AppEventName>(
-    event: E,
-    payload: AppEventPayload<E>,
-): void {
-    const listenerCount = this.emitter.listenerCount(event);
-
-    log.debug('Emitting event', {
-        event,
-        listenerCount,
-    });
-
-    // setImmediate defers emission to the next iteration of the event loop.
-    // This ensures the primary business operation (DB write, response) completes
-    // BEFORE listeners run — critical for audit logs and notifications.
-    setImmediate(() => {
-    this.emitter.emit(event, payload);
-});
-  }
-
-// ── emitSync ─────────────────────────────────────────────────────────────
-// Synchronous emit — listeners run in the current event loop tick.
-// Only use when the calling code explicitly needs to wait for listeners.
-// Prefer emit() for all normal use cases.
-
-emitSync<E extends AppEventName>(
-    event: E,
-    payload: AppEventPayload<E>,
-): void {
-    this.emitter.emit(event, payload);
-}
-
-// ── off ──────────────────────────────────────────────────────────────────
-
-off<E extends AppEventName>(
-    event: E,
-    listener: Listener<E>,
-): void {
-    this.emitter.off(event, listener as (...args: unknown[]) => void);
-}
-
-// ── Introspection ─────────────────────────────────────────────────────────
-
-listenerCount(event: AppEventName): number {
-    return this.emitter.listenerCount(event);
-}
-
-registeredListeners(): Record < string, string[] > {
-    const result: Record<string, string[]> = { };
-for (const [event, listeners] of this.registry.entries()) {
-    result[event] = listeners.map((l) => l.name);
-}
-return result;
-  }
-
-removeAllListeners(): void {
-    this.emitter.removeAllListeners();
-    this.registry.clear();
-}
+    removeAllListeners(): void {
+        this.emitter.removeAllListeners();
+        this.registry.clear();
+    }
 }
 
 // ─── Singleton export ─────────────────────────────────────────────────────────

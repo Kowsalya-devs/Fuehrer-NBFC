@@ -422,9 +422,9 @@ export const disbursementService = {
         // All three writes succeed together or all roll back.
         // EMI schedule creation is separate but called immediately after.
 
-        let loanAccount: Awaited<ReturnType
-      typeof loansRepository.createAccount
-            >>;
+        let loanAccount: Awaited<ReturnType<
+            typeof loansRepository.createAccount
+        >>;
 
         await prisma.$transaction(async (tx) => {
             // 1. Create loan account

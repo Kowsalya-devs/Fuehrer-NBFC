@@ -87,10 +87,10 @@ export async function disconnectDatabase(): Promise<void> {
 // PostgreSQL throws code 40001 on serialization conflicts — retry is correct
 
 type TransactionCallback<T> = (
-    tx: Omit
-    PrismaClient,
-    '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
-  >,
+    tx: Omit<
+        PrismaClient,
+        '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'
+    >,
 ) => Promise<T>;
 
 export async function withTransaction<T>(
