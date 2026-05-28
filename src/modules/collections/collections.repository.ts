@@ -331,6 +331,7 @@ export const collectionsRepository = {
             // Case counts by status
             prisma.collection_cases.groupBy({
                 by: ['status'],
+                orderBy: { _count: { id: 'desc' } },
                 _count: { id: true },
             }),
 

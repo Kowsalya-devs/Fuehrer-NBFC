@@ -4,8 +4,8 @@ import { reportsService } from './reports.service';
 import { reportsRepository } from './reports.repository';
 import { HTTP } from '@/config/constants';
 import { successResponse } from '@/types/common.types';
-import { getValidatedQuery, getAuthUser } from '@/types/express.d';
-import type { AuthRequest } from '@/types/express.d';
+import { getValidatedQuery, getAuthUser } from '@/types/express';
+import type { AuthRequest } from '@/types/express';
 import type {
     PortfolioMISInput,
     CollectionEfficiencyInput,

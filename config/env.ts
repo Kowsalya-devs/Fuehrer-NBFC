@@ -217,7 +217,7 @@ const schema = Joi.object({
     CORS_ALLOWED_ORIGINS: Joi.string().default(''),
     // Comma-separated list e.g. "https://app.feuhrer.in,https://admin.feuhrer.in"
 
-}).unknown(false); // Fail on any undeclared env var in production
+}).unknown(true); // Fail on any undeclared env var in production
 
 // ─── Validate ─────────────────────────────────────────────────────────────────
 

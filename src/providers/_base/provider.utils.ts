@@ -53,8 +53,6 @@ export function createHttpClient(opts: CreateHttpClientOptions): AxiosInstance {
             Accept: 'application/json',
             ...opts.headers,
         },
-        // Treat 4xx as errors (default), but don't auto-throw on 5xx so
-        // vendorCall() can decide whether to retry.
         validateStatus: (status) => status >= 200 && status < 300,
     });
 
@@ -64,7 +62,6 @@ export function createHttpClient(opts: CreateHttpClientOptions): AxiosInstance {
         config.headers = config.headers ?? {};
         config.headers['x-correlation-id'] = correlationId;
 
-        // Stash on config so the response interceptor can read it
         (config as AxiosRequestConfig & { _correlationId?: string })
             ._correlationId = correlationId;
         (config as AxiosRequestConfig & { _startTime?: number })
@@ -122,13 +119,25 @@ export function createHttpClient(opts: CreateHttpClientOptions): AxiosInstance {
 export interface VendorCallOptions<T> {
     vendor: string;
     fn: () => Promise<T>;
-    maxRetries?: number;   // Default 2 (so total 3 attempts)
-    backoffMs?: number;    // Initial backoff, doubles each retry. Default 200ms.
+    /**
+     * Retry config — pass as an object:
+     *   retry: { maxAttempts: 3, delayMs: 1000, backoffFactor: 2 }
+     *
+     * maxAttempts = total attempts (including the first). Default 3.
+     * delayMs     = initial backoff delay in ms. Default 200.
+     * backoffFactor = multiplier per retry. Default 2 (exponential).
+     */
+    retry?: {
+        maxAttempts?: number;
+        delayMs?: number;
+        backoffFactor?: number;
+    };
     onRetry?: (attempt: number, error: unknown) => void;
 }
 
-const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_BACKOFF_MS = 200;
+const DEFAULT_BACKOFF_FACTOR = 2;
 const DEFAULT_MAX_BACKOFF_MS = 5000;
 
 /**
@@ -145,8 +154,10 @@ const DEFAULT_MAX_BACKOFF_MS = 5000;
  */
 export async function vendorCall<T>(opts: VendorCallOptions<T>): Promise<T> {
     const log = createModuleLogger(`vendor:${opts.vendor}`);
-    const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
-    const initialBackoff = opts.backoffMs ?? DEFAULT_BACKOFF_MS;
+    const maxAttempts = opts.retry?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+    const initialBackoff = opts.retry?.delayMs ?? DEFAULT_BACKOFF_MS;
+    const backoffFactor = opts.retry?.backoffFactor ?? DEFAULT_BACKOFF_FACTOR;
+    const maxRetries = maxAttempts - 1; // convert total attempts → retry count
 
     let lastError: unknown;
     let attempt = 0;
@@ -176,9 +187,9 @@ export async function vendorCall<T>(opts: VendorCallOptions<T>): Promise<T> {
                 throw _wrapAsVendorError(opts.vendor, err);
             }
 
-            // Compute backoff with jitter (±20%) to avoid thundering herd
+            // Exponential backoff with ±20% jitter to avoid thundering herd
             const baseBackoff = Math.min(
-                initialBackoff * Math.pow(2, attempt),
+                initialBackoff * Math.pow(backoffFactor, attempt),
                 DEFAULT_MAX_BACKOFF_MS,
             );
             const jitter = baseBackoff * (0.8 + Math.random() * 0.4);
@@ -207,14 +218,11 @@ export async function vendorCall<T>(opts: VendorCallOptions<T>): Promise<T> {
 // ─── Internals ────────────────────────────────────────────────────────────────
 
 function _isRetryable(err: unknown): boolean {
-    // Already a VendorError that told us it's retryable
     if (err instanceof VendorError) {
         return err.retryable;
     }
 
-    // Axios error — inspect network code and HTTP status
     if (axios.isAxiosError(err)) {
-        // Network / timeout errors
         if (err.code === 'ECONNABORTED') return true;
         if (err.code === 'ETIMEDOUT') return true;
         if (err.code === 'ECONNRESET') return true;
@@ -223,21 +231,19 @@ function _isRetryable(err: unknown): boolean {
 
         const status = err.response?.status;
         if (status === undefined) return true;  // no response = network blip
-        if (status === 408) return true;  // Request Timeout
-        if (status === 429) return true;  // Rate limit — server told us to retry
-        if (status === 502) return true;  // Bad Gateway
-        if (status === 503) return true;  // Service Unavailable
-        if (status === 504) return true;  // Gateway Timeout
+        if (status === 408) return true;
+        if (status === 429) return true;
+        if (status === 502) return true;
+        if (status === 503) return true;
+        if (status === 504) return true;
 
-        return false;  // 4xx (other than above) is a logic error — don't retry
+        return false;
     }
 
     return false;
 }
 
 function _wrapAsVendorError(vendor: string, err: unknown): VendorError {
-    // Already a VendorError — pass through unchanged so callers see the
-    // most specific subclass (KycVendorError, BureauVendorError, etc.)
     if (err instanceof VendorError) {
         return err;
     }

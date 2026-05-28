@@ -386,7 +386,7 @@ export const paymentsService = {
             case 'payment.captured': {
                 const entity = payload.payload.payment?.entity;
                 if (!entity) return;
-                await this._handlePaymentCaptured(entity, requestId);
+                await this._handlePaymentCaptured(entity as unknown as Record<string, unknown>, requestId);
                 break;
             }
 
@@ -394,7 +394,7 @@ export const paymentsService = {
             case 'payment.failed': {
                 const entity = payload.payload.payment?.entity;
                 if (!entity) return;
-                await this._handlePaymentFailed(entity, requestId);
+                await this._handlePaymentFailed(entity as unknown as Record<string, unknown>, requestId);
                 break;
             }
 

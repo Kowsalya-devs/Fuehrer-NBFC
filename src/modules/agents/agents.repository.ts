@@ -43,7 +43,7 @@ function mapAgent(row: Record<string, unknown>): AgentProfile {
         bankIfsc: row.bank_ifsc as string,
         bankAccountName: row.bank_account_name as string,
         status: row.status as AgentStatus,
-        commissionRate: toNumber(row.commission_rate as number),
+        commissionRate: toNumber(row.commission_rate as unknown as number),
         panNumber: row.pan_number as string | null,
         aadhaarLast4: row.aadhaar_last4 as string | null,
         suspensionReason: row.suspension_reason as string | null,
@@ -59,7 +59,7 @@ function mapCommission(row: Record<string, unknown>): AgentCommission {
         agentId: row.agent_id as string,
         loanAccountId: row.loan_account_id as string,
         userId: row.user_id as string,
-        commissionAmount: toNumber(row.commission_amount as number),
+        commissionAmount: toNumber(row.commission_amount as unknown as number),
         status: row.status as CommissionStatus,
         clawbackEligibleUntil: row.clawback_eligible_until as Date,
         clawbackReason: row.clawback_reason as string | null,
@@ -328,13 +328,14 @@ export const agentsRepository = {
             by: ['status'],
             where: { agent_id: agentId },
             _sum: { commission_amount: true },
+            orderBy: { status: 'asc' },
         });
 
         const byStatus = Object.fromEntries(
             (rows as Array<{
                 status: string;
-                _sum: { commission_amount: number | null };
-            }>).map((r) => [r.status, toNumber(r._sum.commission_amount ?? 0)]),
+                _sum: { commission_amount: unknown };
+            }>).map((r) => [r.status, toNumber((r._sum.commission_amount ?? 0) as unknown as number)]),
         );
 
         return {
@@ -359,7 +360,7 @@ export const agentsRepository = {
                 }),
                 prisma.loan_accounts.count({
                     where: {
-                        loan_applications: { agent_id: agentId },
+                        application: { agent_id: agentId },
                         status: { in: ['ACTIVE', 'DISBURSED'] },
                     },
                 }),
@@ -368,7 +369,7 @@ export const agentsRepository = {
                 }),
                 prisma.loan_accounts.aggregate({
                     where: {
-                        loan_applications: { agent_id: agentId },
+                        application: { agent_id: agentId },
                     },
                     _sum: { principal_amount: true },
                 }),
@@ -378,7 +379,7 @@ export const agentsRepository = {
             totalSubmitted: submitted,
             active,
             rejected,
-            totalDisbursed: toNumber(disbursed._sum.principal_amount ?? 0),
+            totalDisbursed: toNumber((disbursed._sum?.principal_amount ?? 0) as unknown as number),
         };
     },
 
@@ -434,7 +435,7 @@ export const agentsRepository = {
             return {
                 id: payout.id as string,
                 agentId: payout.agent_id as string,
-                totalAmount: toNumber(payout.total_amount as number),
+                totalAmount: toNumber(payout.total_amount as unknown as number),
                 commissionIds: data.commissionIds,
                 utrNumber: null,
                 status: 'PENDING',

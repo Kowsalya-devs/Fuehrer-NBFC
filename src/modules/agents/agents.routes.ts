@@ -65,7 +65,7 @@ router.patch(
     async (req, res, next) => {
         // Redirect to /agents/:agentId using the agent's ID from their profile
         const { agentsService } = await import('./agents.service');
-        const { getAuthUser } = await import('@/types/express.d');
+        const { getAuthUser } = await import('@/types/express');
         try {
             const user = getAuthUser(req);
             const agent = await agentsService.getAgentByUserId(user.id);

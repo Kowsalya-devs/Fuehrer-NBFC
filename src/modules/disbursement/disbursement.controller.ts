@@ -7,8 +7,8 @@ import {
     getValidatedBody,
     getValidatedParams,
     getAuthUser,
-} from '@/types/express.d';
-import type { AuthRequest } from '@/types/express.d';
+} from '@/types/express';
+import type { AuthRequest } from '@/types/express';
 import type { InitiateDisbursementInput } from './disbursement.types';
 import { DISBURSEMENT_MODE } from '@/config/constants';
 

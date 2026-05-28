@@ -439,7 +439,7 @@ export const underwritingService = {
 
         // Only REFERRED or UNDERWRITING loans can be re-run
         const rerunableStatuses = [LOAN_STATUS.UNDERWRITING, LOAN_STATUS.PENDING_APPROVAL];
-        if (!rerunableStatuses.includes(loan.status)) {
+        if (!rerunableStatuses.includes(loan.status as typeof rerunableStatuses[number])) {
             throw new DomainError(
                 `Underwriting cannot be re-run for a loan in status: ${loan.status}`,
                 'INVALID_RERUN_STATE',

@@ -50,8 +50,10 @@ export type {
 export { getBankVerifyProvider, _resetBankVerifyProvider } from './bankVerify';
 export type { IBankVerifyProvider } from './bankVerify';
 export type {
-    BankVerifyInput,
     BankVerifyResult,
+    PennyDropInput,
+    PennyDropResult,
+    SilentVerifyInput,
 } from './bankVerify';
 
 // ─── Background check (agent onboarding) ─────────────────────────────────────

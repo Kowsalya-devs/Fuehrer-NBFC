@@ -2,7 +2,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '@/config/database';
 import { createModuleLogger } from '@/config/logger';
-import type { AuditContext } from '@/types/express.d';
+import type { AuditContext } from '@/types/express';
 
 const log = createModuleLogger('auditTrail');
 

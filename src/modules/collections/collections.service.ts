@@ -33,6 +33,7 @@ import type {
     ListCasesInput,
 } from './collections.types';
 import { classifyDpd } from './collections.types';
+import type { OverdueEmiResult } from '@/modules/emi/emi.types';
 
 const log = createModuleLogger('collections.service');
 
@@ -471,17 +472,17 @@ export const collectionsService = {
                 continue;
             }
 
-            // Fetch current overdue amount
-            const emiStats = await emiRepository.getOverdueEmis(0);
+            // Fetch current overdue amount — use findOverdueEmis (correct method name)
+            const emiStats: OverdueEmiResult[] = await emiRepository.findOverdueEmis(0);
             const thisLoan = emiStats.filter(
-                (e) => e.loanAccountId === loan.loanAccountId,
+                (e: OverdueEmiResult) => e.loanAccountId === loan.loanAccountId,
             );
 
             const overdueAmount = thisLoan.reduce(
-                (sum, e) => sum + e.emiAmount, 0,
+                (sum: number, e: OverdueEmiResult) => sum + Number(e.emiAmount), 0,
             );
             const penaltyAmount = thisLoan.reduce(
-                (sum, e) => sum + e.penaltyAmount, 0,
+                (sum: number, e: OverdueEmiResult) => sum + Number(e.penaltyAmount), 0,
             );
 
             await this.openCase({

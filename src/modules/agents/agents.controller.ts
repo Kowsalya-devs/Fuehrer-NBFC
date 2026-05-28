@@ -11,8 +11,8 @@ import {
     getValidatedParams,
     getValidatedQuery,
     getAuthUser,
-} from '@/types/express.d';
-import type { AuthRequest } from '@/types/express.d';
+} from '@/types/express';
+import type { AuthRequest } from '@/types/express';
 import type {
     OnboardAgentInput,
     UpdateAgentInput,

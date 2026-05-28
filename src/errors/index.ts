@@ -53,4 +53,4 @@ export {
     PAYMENT_ERRORS,
     SmsVendorError,
     StorageVendorError,
-} from './VendorErrors';
+} from './VendorError';

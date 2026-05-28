@@ -8,11 +8,14 @@ export type { SendSmsInput, SendSmsResult } from './interface';
 let instance: ISmsProvider | null = null;
 
 export function getSmsProvider(): ISmsProvider {
-    if (instance) return instance;
+    if (instance !== null) return instance;
+
+    let created: ISmsProvider;
+
     if (env.sms.provider === 'twilio') {
         const { TwilioSmsProvider } = require('./live');
         const s = getSecrets();
-        instance = new TwilioSmsProvider(
+        created = new TwilioSmsProvider(
             s.twilio.accountSid,
             s.twilio.authToken,
             s.twilio.fromNumber,
@@ -20,16 +23,18 @@ export function getSmsProvider(): ISmsProvider {
     } else if (env.sms.provider === 'msg91') {
         const { Msg91SmsProvider } = require('./live');
         const s = getSecrets();
-        instance = new Msg91SmsProvider(
+        created = new Msg91SmsProvider(
             s.msg91.authKey,
             s.msg91.senderId,
             s.msg91.templateId,
         );
     } else {
         const { StubSmsProvider } = require('./stub');
-        instance = new StubSmsProvider();
+        created = new StubSmsProvider();
     }
-    return instance;
+
+    instance = created;
+    return created;
 }
 
 export function _resetSmsProvider(): void { instance = null; }

@@ -10,7 +10,7 @@
 //   3. Template choice and channel selection live here, not in the emitting module.
 //   4. Deduplication keys prevent spam (e.g. one EMI reminder per 24h per loan).
 
-import { eventBus } from '@/events';
+import { eventBus } from '@/events/eventBus';
 import { notificationsService } from './notifications.service';
 import { createModuleLogger } from '@/config/logger';
 import { formatRupees } from '@/types/common.types';

@@ -45,8 +45,8 @@ function mapToKycDocument(row: Record<string, unknown>): KycDocument {
                 : row.signzy_responses) as KycCheckResponses
             : null,
         overallStatus: row.overall_status as KycStatus,
-        completedChecks: (row.completed_checks as string[] | null) ?? [],
-        failedChecks: (row.failed_checks as string[] | null) ?? [],
+        completedChecks: ((row.completed_checks as string[] | null) ?? []) as KycCheck[],
+        failedChecks: ((row.failed_checks as string[] | null) ?? []) as KycCheck[],
         rejectionReason: row.rejection_reason as string | null,
         verifiedAt: row.verified_at as Date | null,
         createdAt: row.created_at as Date,

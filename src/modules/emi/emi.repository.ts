@@ -30,12 +30,12 @@ function mapEntry(row: Record<string, unknown>): EmiScheduleEntry {
         loanAccountId: row.loan_account_id as string,
         emiNumber: row.emi_number as number,
         dueDate: row.due_date as Date,
-        emiAmount: toNumber(row.emi_amount as number),
-        principalComponent: toNumber(row.principal_component as number),
-        interestComponent: toNumber(row.interest_component as number),
-        outstandingAfter: toNumber(row.outstanding_after as number),
+        emiAmount: toNumber(row.emi_amount as string | number),
+        principalComponent: toNumber(row.principal_component as string | number),
+        interestComponent: toNumber(row.interest_component as string | number),
+        outstandingAfter: toNumber(row.outstanding_after as string | number),
         status: row.status as string,
-        penaltyAmount: toNumber(row.penalty_amount ?? 0),
+        penaltyAmount: row.penalty_amount != null ? toNumber(row.penalty_amount as string | number) : 0,
         bounceCount: (row.bounce_count as number) ?? 0,
         lastBounceAt: row.last_bounce_at as Date | null,
         nextRetryAt: row.next_retry_at as Date | null,
@@ -135,6 +135,7 @@ export const emiRepository = {
             prisma.emi_schedule.groupBy({
                 by: ['status'],
                 where: { loan_account_id: loanAccountId },
+                orderBy: { _count: { id: 'desc' } },
                 _count: { id: true },
             }),
 
@@ -182,7 +183,7 @@ export const emiRepository = {
             pendingEmis: (countMap[EMI_STATUS.PENDING] as number) ?? 0,
             nextDueDate: nextDue?.due_date ?? null,
             nextEmiAmount: nextDue?.emi_amount
-                ? toNumber(nextDue.emi_amount as number) : null,
+                ? toNumber(nextDue.emi_amount) : null,
             totalOutstanding: toNumber(totals._sum.emi_amount ?? 0),
             totalPenalty: toNumber(totals._sum.penalty_amount ?? 0),
             lastPaidAt: lastPaid?.paid_at ?? null,
@@ -272,7 +273,6 @@ export const emiRepository = {
     },
 
     // ── Cron job queries ──────────────────────────────────────────────────────
-    // These return minimal projections — cron jobs don't need full rows
 
     async findEmisForReminder(
         targetDate: Date,
@@ -320,7 +320,6 @@ export const emiRepository = {
     },
 
     async findEmisForNachDebit(debitDate: Date): Promise<NachDebitTarget[]> {
-        // Debit EMIs due today or yesterday (catch any that were missed)
         const from = new Date(debitDate);
         from.setDate(from.getDate() - 1);
 

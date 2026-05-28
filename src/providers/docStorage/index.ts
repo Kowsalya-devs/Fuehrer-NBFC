@@ -9,19 +9,24 @@ export type {
 let instance: IDocStorageProvider | null = null;
 
 export function getDocStorageProvider(): IDocStorageProvider {
-    if (instance) return instance;
+    if (instance !== null) return instance;
+
+    let created: IDocStorageProvider;
+
     if (env.isProd || env.nodeEnv === 'staging') {
         const { S3DocStorageProvider } = require('./live');
-        instance = new S3DocStorageProvider(
+        created = new S3DocStorageProvider(
             env.aws.region,
             env.aws.s3Bucket,
             env.aws.s3SignedUrlExpiry,
         );
     } else {
         const { StubDocStorageProvider } = require('./stub');
-        instance = new StubDocStorageProvider();
+        created = new StubDocStorageProvider();
     }
-    return instance;
+
+    instance = created;
+    return created;
 }
 
 export function _resetDocStorageProvider(): void { instance = null; }

@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { ROLE } from '@/config/constants';
 import type { Role } from '@/config/constants';
 import { ForbiddenError, RBAC_ERRORS } from '@/errors';
-import type { AuthRequest } from '@/types/express.d';
+import type { AuthRequest } from '@/types/express';
 
 // ─── Role hierarchy ────────────────────────────────────────────────────────────
 // Roles higher in the hierarchy can do everything lower roles can do.

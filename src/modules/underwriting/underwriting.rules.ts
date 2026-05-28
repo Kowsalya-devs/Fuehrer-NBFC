@@ -30,7 +30,7 @@ export interface RuleContext {
 
 type RuleEvaluator = (ctx: RuleContext) => RuleResult;
 
-interface RuleDefinition {
+export interface RuleDefinition {
     id: string;
     name: string;
     category: RuleResult['category'];

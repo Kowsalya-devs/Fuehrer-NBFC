@@ -27,7 +27,7 @@ export async function runDebitRetryJob(): Promise<void> {
                 bounce_count: { lt: BUSINESS_RULES.ENACH_RETRY_LIMIT },
             },
             include: {
-                loan_accounts: {
+                loan_account: {
                     select: {
                         id: true,
                         user_id: true,
@@ -42,7 +42,7 @@ export async function runDebitRetryJob(): Promise<void> {
         log.info(`Debit retry: ${bouncedEmis.length} EMIs eligible for retry`);
 
         for (const emi of bouncedEmis) {
-            const account = emi.loan_accounts;
+            const account = emi.loan_account;
 
             // Skip if loan is no longer active
             if (!account || !['ACTIVE', 'DISBURSED'].includes(account.status as string)) {
@@ -70,8 +70,8 @@ export async function runDebitRetryJob(): Promise<void> {
                         emiId: emi.id,
                         loanAccountId: account.id as string,
                         mandateId: account.razorpay_mandate_id as string,
-                        amount: toNumber(emi.emi_amount as number),
-                        penaltyAmount: toNumber(emi.penalty_amount as number),
+                        amount: toNumber(emi.emi_amount as unknown as number),
+                        penaltyAmount: toNumber(emi.penalty_amount as unknown as number),
                         description: `Retry debit EMI #${emi.emi_number} attempt ${(emi.bounce_count as number) + 1}`,
                     },
                     fakeReq,

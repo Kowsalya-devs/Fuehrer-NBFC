@@ -287,7 +287,7 @@ export const collectionEfficiencyService = {
                 ] = await Promise.all([
                     prisma.admin_users.findUnique({
                         where: { id: aId },
-                        select: { id: true, name: true },
+                        select: { id: true, full_name: true },
                     }),
                     prisma.collection_cases.count({
                         where: {
@@ -340,7 +340,7 @@ export const collectionEfficiencyService = {
 
                 return {
                     agentId: aId,
-                    agentName: agent?.name ?? 'Unknown',
+                    agentName: agent?.full_name ?? 'Unknown',
                     casesAssigned,
                     casesResolved,
                     contactAttempts,

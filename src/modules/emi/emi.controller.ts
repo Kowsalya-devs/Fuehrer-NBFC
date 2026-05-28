@@ -1,19 +1,20 @@
 // src/modules/emi/emi.controller.ts
 import type { Response, NextFunction } from 'express';
-import { emiService } from './emi.service';
+import { emiService } from './emi.services';    // ← was ./emi.service (missing 's')
 import { HTTP, ROLE } from '@/config/constants';
+import type { Role } from '@/config/constants';
 import { successResponse } from '@/types/common.types';
 import {
     getValidatedParams,
     getValidatedQuery,
     getValidatedBody,
     getAuthUser,
-} from '@/types/express.d';
-import type { AuthRequest } from '@/types/express.d';
+} from '@/types/express';
+import type { AuthRequest } from '@/types/express';
 import { ForbiddenError } from '@/errors';
 import { loansRepository } from '@/modules/loans';
 
-const STAFF_ROLES = new Set([
+const STAFF_ROLES = new Set<Role>([
     ROLE.OPS_EXECUTIVE,
     ROLE.CREDIT_MANAGER,
     ROLE.FINANCE,
@@ -22,15 +23,13 @@ const STAFF_ROLES = new Set([
 ]);
 
 // ─── Ownership guard ──────────────────────────────────────────────────────────
-// Ensures the authenticated user owns the loan account being queried,
-// or is a staff member who can access any account.
 
 async function assertLoanAccountAccess(
     loanAccountId: string,
     userId: string,
     role: string,
 ): Promise<void> {
-    if (STAFF_ROLES.has(role as typeof ROLE[keyof typeof ROLE])) return;
+    if (STAFF_ROLES.has(role as Role)) return;   // ← cast to Role, not ROLE[keyof typeof ROLE]
     const account = await loansRepository.findAccountByIdOrThrow(loanAccountId);
     if (account.userId !== userId) {
         throw new ForbiddenError('You can only view your own EMI schedule');

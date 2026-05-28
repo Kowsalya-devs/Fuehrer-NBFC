@@ -7,7 +7,7 @@ import {
     UnauthorizedError,
     AUTH_ERRORS,
 } from '@/errors';
-import type { AuthenticatedUser } from '@/types/express.d';
+import type { AuthenticatedUser } from '@/types/express';
 
 // ─── Token extraction ──────────────────────────────────────────────────────────
 // Accept: "Bearer <token>" in Authorization header only.

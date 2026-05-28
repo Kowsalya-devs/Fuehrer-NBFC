@@ -18,26 +18,18 @@ import {
 const log = createModuleLogger('payment.handlers');
 
 // ─── payment.received ─────────────────────────────────────────────────────────
-// Four things on every successful payment:
-//  1. Mark EMI as PAID
-//  2. Update outstanding balance on loan account
-//  3. Audit log
-//  4. Check if all EMIs are done → close the loan
 
 eventBus.on('payment.received', 'emi:mark-paid', async (payload) => {
     await withTransaction(async (tx) => {
-        // 1. Mark the specific EMI
         await tx.emi_schedule.update({
             where: { id: payload.emiId },
             data: {
                 status: EMI_STATUS.PAID,
                 paid_at: payload.paidAt,
-                // Clear any penalty if paid
                 penalty_amount: 0,
             },
         });
 
-        // 2. Recalculate outstanding balance
         const remainingEmis = await tx.emi_schedule.aggregate({
             where: {
                 loan_account_id: payload.loanAccountId,
@@ -72,7 +64,7 @@ eventBus.on('payment.received', 'audit:payment.received', async (payload) => {
             entity_type: 'payment',
             entity_id: payload.paymentId,
             user_id: payload.userId,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:payment.received:${payload.paymentId}`,
             after_state: JSON.stringify({
                 emiId: payload.emiId,
                 emiNumber: payload.emiNumber,
@@ -87,7 +79,6 @@ eventBus.on('payment.received', 'audit:payment.received', async (payload) => {
 });
 
 eventBus.on('payment.received', 'loan:check-closure', async (payload) => {
-    // Count remaining unpaid EMIs
     const pendingCount = await prisma.emi_schedule.count({
         where: {
             loan_account_id: payload.loanAccountId,
@@ -95,9 +86,8 @@ eventBus.on('payment.received', 'loan:check-closure', async (payload) => {
         },
     });
 
-    if (pendingCount > 0) return; // Still has open EMIs
+    if (pendingCount > 0) return;
 
-    // All EMIs paid — close the loan
     const account = await prisma.loan_accounts.update({
         where: { id: payload.loanAccountId },
         data: {
@@ -116,7 +106,7 @@ eventBus.on('payment.received', 'loan:check-closure', async (payload) => {
         loanAccountId: payload.loanAccountId,
         userId: account.user_id,
         closedAt: new Date(),
-        requestId: payload.requestId,
+        requestId: payload.requestId ?? `event:loan.closed:${payload.loanAccountId}`,
     });
 });
 
@@ -129,7 +119,7 @@ eventBus.on('payment.failed', 'audit:payment.failed', async (payload) => {
             entity_type: 'payment',
             entity_id: payload.paymentId,
             user_id: payload.userId,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:payment.failed:${payload.paymentId}`,
             after_state: JSON.stringify({
                 emiId: payload.emiId,
                 emiNumber: payload.emiNumber,
@@ -143,8 +133,6 @@ eventBus.on('payment.failed', 'audit:payment.failed', async (payload) => {
 });
 
 // ─── emi.bounced ──────────────────────────────────────────────────────────────
-// eNACH debit failed (insufficient funds, account closed, etc.)
-// Apply bounce penalty, update EMI status, log for retry job.
 
 eventBus.on('emi.bounced', 'emi:apply-bounce-penalty', async (payload) => {
     const emi = await prisma.emi_schedule.findUnique({
@@ -184,6 +172,7 @@ eventBus.on('emi.bounced', 'audit:emi.bounced', async (payload) => {
             entity_type: 'emi_schedule',
             entity_id: payload.emiId,
             user_id: payload.userId,
+            request_id: `event:emi.bounced:${payload.emiId}`,
             after_state: JSON.stringify({
                 emiNumber: payload.emiNumber,
                 amount: payload.amount,
@@ -197,7 +186,6 @@ eventBus.on('emi.bounced', 'audit:emi.bounced', async (payload) => {
 });
 
 eventBus.on('emi.bounced', 'loan:check-npa-threshold', async (payload) => {
-    // If bounce count exceeds retry limit, check for NPA threshold
     if (payload.retryCount < BUSINESS_RULES.ENACH_RETRY_LIMIT) return;
 
     const overdueEmis = await prisma.emi_schedule.findMany({
@@ -218,7 +206,6 @@ eventBus.on('emi.bounced', 'loan:check-npa-threshold', async (payload) => {
 
     if (overdueDays < BUSINESS_RULES.NPA_TRIGGER_DAYS) return;
 
-    // Trigger NPA
     const account = await prisma.loan_accounts.update({
         where: { id: payload.loanAccountId },
         data: { status: LOAN_STATUS.NPA },
@@ -247,13 +234,9 @@ eventBus.on('emi.bounced', 'loan:check-npa-threshold', async (payload) => {
 });
 
 // ─── emi.overdue ──────────────────────────────────────────────────────────────
-// Fired by the npaWatch cron job for EMIs past the grace period.
-// Applies daily overdue penalty and checks NPA threshold.
 
 eventBus.on('emi.overdue', 'emi:apply-overdue-penalty', async (payload) => {
-    // Overdue penalty = annual rate / 365 × outstanding × overdue days
-    const dailyPenaltyRate =
-        BUSINESS_RULES.EMI_OVERDUE_PENALTY_RATE / 365;
+    const dailyPenaltyRate = BUSINESS_RULES.EMI_OVERDUE_PENALTY_RATE / 365;
 
     const dailyPenalty = roundRupees(
         toNumber(payload.overdueAmount) * dailyPenaltyRate,
@@ -267,7 +250,6 @@ eventBus.on('emi.overdue', 'emi:apply-overdue-penalty', async (payload) => {
         },
     });
 
-    // Update loan account outstanding to include the new penalty
     await prisma.loan_accounts.update({
         where: { id: payload.loanAccountId },
         data: {
@@ -285,7 +267,7 @@ eventBus.on('mandate.created', 'audit:mandate.created', async (payload) => {
             entity_type: 'loan_account',
             entity_id: payload.loanAccountId,
             user_id: payload.userId,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:mandate.created:${payload.loanAccountId}`,
             after_state: JSON.stringify({
                 mandateId: payload.mandateId,
                 bankAccount: payload.bankAccount,

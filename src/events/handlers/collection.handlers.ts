@@ -14,6 +14,7 @@ eventBus.on('collection.assigned', 'audit:collection.assigned', async (payload) 
             action: 'COLLECTION_ASSIGNED',
             entity_type: 'collection_case',
             entity_id: payload.loanAccountId,
+            request_id: `event:collection.assigned:${payload.loanAccountId}`,
             after_state: JSON.stringify({
                 assignedAgentId: payload.assignedAgentId,
                 overdueDays: payload.overdueDays,
@@ -25,14 +26,11 @@ eventBus.on('collection.assigned', 'audit:collection.assigned', async (payload) 
 });
 
 // ─── collection.payment.logged ────────────────────────────────────────────────
-// Field collection agent logs a cash/UPI payment that didn't go through eNACH.
-// This updates the EMI status and triggers the same closure check.
 
 eventBus.on(
     'collection.payment.logged',
     'emi:update-from-collection',
     async (payload) => {
-        // Find the oldest unpaid EMI for this loan account
         const overdueEmi = await prisma.emi_schedule.findFirst({
             where: {
                 loan_account_id: payload.loanAccountId,
@@ -77,7 +75,7 @@ eventBus.on(
                 entity_type: 'collection_case',
                 entity_id: payload.collectionId,
                 user_id: payload.loggedBy,
-                request_id: payload.requestId,
+                request_id: payload.requestId ?? `event:collection.payment:${payload.collectionId}`,
                 after_state: JSON.stringify({
                     amount: payload.amount,
                     channel: payload.channel,
@@ -93,7 +91,6 @@ eventBus.on(
     'collection.payment.logged',
     'collection:check-resolve',
     async (payload) => {
-        // If no more overdue EMIs, close the collection case
         const overdueCount = await prisma.emi_schedule.count({
             where: {
                 loan_account_id: payload.loanAccountId,
@@ -103,6 +100,7 @@ eventBus.on(
 
         if (overdueCount > 0) return;
 
+        // Use resolved_at for RESOLVED status, closed_at for CLOSED status
         await prisma.collection_cases.updateMany({
             where: {
                 loan_account_id: payload.loanAccountId,
@@ -110,7 +108,7 @@ eventBus.on(
             },
             data: {
                 status: 'RESOLVED',
-                closed_at: new Date(),
+                resolved_at: new Date(),          // ← correct field for RESOLVED
                 close_reason: 'All overdue EMIs cleared via collection',
             },
         });

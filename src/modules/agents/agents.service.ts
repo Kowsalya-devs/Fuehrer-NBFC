@@ -1,4 +1,5 @@
 // src/modules/agents/agents.service.ts
+import { prisma } from '@/config/database';
 import type { Request } from 'express';
 import { agentsRepository } from './agents.repository';
 import { agentEvents } from './agents.events';
@@ -38,7 +39,6 @@ const log = createModuleLogger('agents.service');
 // ─── Masking helpers ───────────────────────────────────────────────────────────
 
 function maskAccountNumber(accountNo: string): string {
-    // Keep only last 4 digits visible: XXXXXXXXXXXX1234
     return accountNo
         .slice(0, -4)
         .replace(/./g, 'X')
@@ -94,8 +94,6 @@ function toCommissionResponse(c: {
 export const agentsService = {
 
     // ── 1. Onboard agent ──────────────────────────────────────────────────────
-    // Creates an agent in PENDING status — must be activated by ops before
-    // they can submit loan applications.
 
     async onboardAgent(
         input: OnboardAgentInput,
@@ -107,13 +105,11 @@ export const agentsService = {
             ...rest
         } = input;
 
-        // Prevent duplicate agent for same phone
         const existingByPhone = await agentsRepository.findByPhone(phone);
         if (existingByPhone) {
             throw CONFLICT_ERRORS.duplicateAgent(phone);
         }
 
-        // Prevent duplicate agent for same userId
         const existingByUser = await agentsRepository.findByUserId(userId);
         if (existingByUser) {
             throw new DomainError(
@@ -132,7 +128,6 @@ export const agentsService = {
             shopAddress: rest.shopAddress,
             shopCity: rest.shopCity,
             shopPincode: rest.shopPincode,
-            // Mask sensitive data before storage
             bankAccountNo: maskAccountNumber(bankAccountNo),
             bankIfsc: input.bankIfsc,
             bankAccountName: input.bankAccountName,
@@ -164,7 +159,7 @@ export const agentsService = {
         return toProfileResponse(agent);
     },
 
-    // ── 2. Activate agent (ops executive approves onboarding) ────────────────
+    // ── 2. Activate agent ─────────────────────────────────────────────────────
 
     async activateAgent(
         agentId: string,
@@ -336,13 +331,11 @@ export const agentsService = {
     ): Promise<AgentProfileResponse> {
         const agent = await agentsRepository.findByIdOrThrow(agentId);
 
-        // Agents can only update their own profile
         const staffRoles = new Set(['OPS_EXECUTIVE', 'SUPER_ADMIN']);
         if (!staffRoles.has(role) && agent.userId !== userId) {
             throw new ForbiddenError('You can only update your own profile');
         }
 
-        // Mask bank account before storing if it's being updated
         const updateData = { ...input };
         if (updateData.bankAccountNo) {
             updateData.bankAccountNo = maskAccountNumber(updateData.bankAccountNo);
@@ -373,7 +366,7 @@ export const agentsService = {
         return toProfileResponse(agent);
     },
 
-    // ── 8. Get agent by userId (for token-decoded lookups) ────────────────────
+    // ── 8. Get agent by userId ────────────────────────────────────────────────
 
     async getAgentByUserId(userId: string): Promise<AgentProfileResponse | null> {
         const agent = await agentsRepository.findByUserId(userId);
@@ -407,7 +400,6 @@ export const agentsService = {
         const [commissionStats, loanStats, recentLoans] = await Promise.all([
             agentsRepository.getCommissionStats(agentId),
             agentsRepository.getLoanStats(agentId),
-            // Recent 5 loans for the dashboard preview
             prisma.loan_applications.findMany({
                 where: { agent_id: agentId },
                 orderBy: { applied_at: 'desc' },
@@ -417,10 +409,10 @@ export const agentsService = {
                     amount_requested: true,
                     status: true,
                     applied_at: true,
-                    users: {
+                    user: {                          // ← singular (schema: user users)
                         select: { full_name: true },
                     },
-                    loan_accounts: {
+                    loan_account: {                  // ← singular (schema: loan_account loan_accounts?)
                         select: {
                             agent_commissions: {
                                 select: { commission_amount: true },
@@ -434,7 +426,7 @@ export const agentsService = {
 
         const pendingCommission = commissionStats.pendingAmount;
         const nextPayoutEstimate = roundRupees(
-            pendingCommission * (1 - 0.02), // 2% TDS deduction estimate
+            pendingCommission * (1 - 0.02),
         );
 
         return {
@@ -454,12 +446,12 @@ export const agentsService = {
             nextPayoutEstimate,
             recentLoans: recentLoans.map((l) => ({
                 loanId: l.id,
-                customerName: (l.users as { full_name: string })?.full_name ?? 'Unknown',
-                amount: toNumber(l.amount_requested as number),
+                customerName: l.user?.full_name ?? 'Unknown',
+                amount: toNumber(l.amount_requested),   // ← toNumber() wraps Decimal safely
                 status: l.status as string,
                 appliedAt: l.applied_at as Date,
-                commission: l.loan_accounts?.[0]?.agent_commissions?.[0]
-                    ? toNumber(l.loan_accounts[0].agent_commissions[0].commission_amount as number)
+                commission: l.loan_account?.agent_commissions?.[0]
+                    ? toNumber(l.loan_account.agent_commissions[0].commission_amount)
                     : null,
             })),
         };
@@ -473,7 +465,6 @@ export const agentsService = {
         userId: string,
         role: string,
     ) {
-        // Agents can only see their own commissions
         const staffRoles = new Set(['FINANCE', 'SUPER_ADMIN', 'OPS_EXECUTIVE']);
         if (!staffRoles.has(role)) {
             const agent = await agentsRepository.findByUserId(userId);
@@ -489,8 +480,6 @@ export const agentsService = {
     },
 
     // ── 12. Process commission payout ──────────────────────────────────────────
-    // Finance processes all pending commissions for an agent in one batch.
-    // Commissions within clawback window are excluded.
 
     async processPayout(
         input: ProcessPayoutInput,
@@ -504,7 +493,6 @@ export const agentsService = {
             throw new AgentNotActiveError(agentId, agent.status);
         }
 
-        // Find all commissions past the clawback window
         const earned = await agentsRepository.findEarnedCommissionsForAgent(agentId);
 
         if (earned.length === 0) {
@@ -520,14 +508,12 @@ export const agentsService = {
             earned.reduce((sum, c) => sum + c.commissionAmount, 0),
         );
 
-        // Create the payout batch record — marks commissions as PAID atomically
         const payout = await agentsRepository.createPayoutBatch({
             agentId,
             totalAmount,
             commissionIds: earned.map((c) => c.id),
         });
 
-        // Trigger the actual bank transfer
         const paymentProvider = getPaymentProvider();
 
         try {
@@ -568,9 +554,6 @@ export const agentsService = {
             });
 
         } catch (err) {
-            // Payout transfer failed — mark batch as failed
-            // Commissions are PAID in DB but payout batch is FAILED
-            // Finance must retry the bank transfer manually
             await agentsRepository.updatePayoutStatus(payout.id, 'FAILED');
 
             log.error('Commission payout bank transfer failed', {
@@ -586,7 +569,6 @@ export const agentsService = {
     },
 
     // ── 13. Gate check — used by loans module ────────────────────────────────
-    // Called before allowing an agent to submit a loan application.
 
     async assertAgentActive(agentId: string): Promise<void> {
         const agent = await agentsRepository.findByIdOrThrow(agentId);
@@ -595,6 +577,3 @@ export const agentsService = {
         }
     },
 };
-
-// Lazy import to avoid circular dependency
-import { prisma } from '@/config/database';

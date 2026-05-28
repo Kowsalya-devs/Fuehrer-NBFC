@@ -12,8 +12,6 @@ import { toNumber, roundRupees } from '@/types/common.types';
 
 const log = createModuleLogger('loan.handlers');
 
-// ─── loan.created ─────────────────────────────────────────────────────────────
-
 eventBus.on('loan.created', 'audit:loan.created', async (payload) => {
     await prisma.audit_logs.create({
         data: {
@@ -21,7 +19,7 @@ eventBus.on('loan.created', 'audit:loan.created', async (payload) => {
             entity_type: 'loan_application',
             entity_id: payload.loanId,
             user_id: payload.userId,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:loan.created:${payload.loanId}`,
             after_state: JSON.stringify({
                 loanId: payload.loanId,
                 amount: payload.amount,
@@ -34,8 +32,6 @@ eventBus.on('loan.created', 'audit:loan.created', async (payload) => {
     });
 });
 
-// ─── loan.approved ────────────────────────────────────────────────────────────
-
 eventBus.on('loan.approved', 'audit:loan.approved', async (payload) => {
     await prisma.audit_logs.create({
         data: {
@@ -43,7 +39,7 @@ eventBus.on('loan.approved', 'audit:loan.approved', async (payload) => {
             entity_type: 'loan_application',
             entity_id: payload.loanId,
             user_id: payload.approvedBy,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:loan.approved:${payload.loanId}`,
             after_state: JSON.stringify({
                 approvedAmount: payload.approvedAmount,
                 interestRate: payload.interestRate,
@@ -55,8 +51,6 @@ eventBus.on('loan.approved', 'audit:loan.approved', async (payload) => {
     });
 });
 
-// ─── loan.rejected ────────────────────────────────────────────────────────────
-
 eventBus.on('loan.rejected', 'audit:loan.rejected', async (payload) => {
     await prisma.audit_logs.create({
         data: {
@@ -64,18 +58,12 @@ eventBus.on('loan.rejected', 'audit:loan.rejected', async (payload) => {
             entity_type: 'loan_application',
             entity_id: payload.loanId,
             user_id: payload.rejectedBy,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:loan.rejected:${payload.loanId}`,
             after_state: JSON.stringify({ reason: payload.reason }),
             created_at: new Date(),
         },
     });
 });
-
-// ─── loan.disbursed ───────────────────────────────────────────────────────────
-// Three things happen concurrently on disbursement:
-//  1. Audit log
-//  2. Agent commission calculation
-//  3. Commission clawback timer (if loan goes NPA within 90 days)
 
 eventBus.on('loan.disbursed', 'audit:loan.disbursed', async (payload) => {
     await prisma.audit_logs.create({
@@ -84,7 +72,7 @@ eventBus.on('loan.disbursed', 'audit:loan.disbursed', async (payload) => {
             entity_type: 'loan_account',
             entity_id: payload.loanAccountId,
             user_id: payload.userId,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:loan.disbursed:${payload.loanAccountId}`,
             after_state: JSON.stringify({
                 disbursedAmount: payload.disbursedAmount,
                 disbursedAt: payload.disbursedAt,
@@ -96,7 +84,6 @@ eventBus.on('loan.disbursed', 'audit:loan.disbursed', async (payload) => {
 });
 
 eventBus.on('loan.disbursed', 'commission:calculate', async (payload) => {
-    // No agent — no commission
     if (!payload.agentId) return;
 
     try {
@@ -104,14 +91,21 @@ eventBus.on('loan.disbursed', 'commission:calculate', async (payload) => {
             payload.disbursedAmount * BUSINESS_RULES.AGENT_COMMISSION_RATE,
         );
 
+        // Fetch user_id from loan account — required field on agent_commissions
+        const loanAccount = await prisma.loan_accounts.findUnique({
+            where: { id: payload.loanAccountId },
+            select: { user_id: true },
+        });
+        if (!loanAccount) return;
+
         await prisma.agent_commissions.create({
             data: {
                 agent_id: payload.agentId,
                 loan_account_id: payload.loanAccountId,
+                user_id: loanAccount.user_id,          // ← added
                 commission_amount: commissionAmount,
                 status: COMMISSION_STATUS.EARNED,
                 earned_at: new Date(),
-                // Clawback window — if loan goes NPA within 90 days, commission is reversed
                 clawback_eligible_until: new Date(
                     Date.now() +
                     BUSINESS_RULES.COMMISSION_CLAWBACK_DAYS * 24 * 60 * 60 * 1000,
@@ -125,9 +119,8 @@ eventBus.on('loan.disbursed', 'commission:calculate', async (payload) => {
             commissionAmount,
         });
 
-        // Re-emit so notification handler can alert the agent
         eventBus.emit('commission.earned', {
-            commissionId: '', // Will be updated — fire-and-forget is ok here
+            commissionId: '',
             agentId: payload.agentId,
             loanAccountId: payload.loanAccountId,
             amount: commissionAmount,
@@ -143,12 +136,6 @@ eventBus.on('loan.disbursed', 'commission:calculate', async (payload) => {
     }
 });
 
-// ─── loan.npa ─────────────────────────────────────────────────────────────────
-// When a loan flips to NPA:
-//  1. Audit log
-//  2. Clawback any pending commissions earned within the window
-//  3. Assign to collections queue
-
 eventBus.on('loan.npa', 'audit:loan.npa', async (payload) => {
     await prisma.audit_logs.create({
         data: {
@@ -156,7 +143,7 @@ eventBus.on('loan.npa', 'audit:loan.npa', async (payload) => {
             entity_type: 'loan_account',
             entity_id: payload.loanAccountId,
             user_id: payload.userId,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:loan.npa:${payload.loanAccountId}`,
             after_state: JSON.stringify({
                 overdueDays: payload.overdueDays,
                 overdueAmount: payload.overdueAmount,
@@ -168,7 +155,6 @@ eventBus.on('loan.npa', 'audit:loan.npa', async (payload) => {
 });
 
 eventBus.on('loan.npa', 'commission:clawback', async (payload) => {
-    // Find commissions still in clawback window for this loan
     const commissions = await prisma.agent_commissions.findMany({
         where: {
             loan_account_id: payload.loanAccountId,
@@ -204,19 +190,15 @@ eventBus.on('loan.npa', 'commission:clawback', async (payload) => {
 });
 
 eventBus.on('loan.npa', 'collections:auto-assign', async (payload) => {
-    // Check if already assigned
     const existing = await prisma.collection_cases.findFirst({
         where: { loan_account_id: payload.loanAccountId, status: 'OPEN' },
     });
 
     if (existing) return;
 
-    // Find the least-loaded active collection agent
     const agent = await prisma.admin_users.findFirst({
         where: { role: 'COLLECTION_AGENT', status: 'ACTIVE' },
-        orderBy: {
-            collection_cases: { _count: 'asc' },
-        },
+        orderBy: { collection_cases: { _count: 'asc' } },
     });
 
     await prisma.collection_cases.create({
@@ -226,6 +208,7 @@ eventBus.on('loan.npa', 'collections:auto-assign', async (payload) => {
             assigned_to: agent?.id ?? null,
             overdue_days: payload.overdueDays,
             overdue_amount: payload.overdueAmount,
+            total_due: payload.overdueAmount,
             status: 'OPEN',
             opened_at: new Date(),
         },
@@ -247,8 +230,6 @@ eventBus.on('loan.npa', 'collections:auto-assign', async (payload) => {
     });
 });
 
-// ─── loan.closed ──────────────────────────────────────────────────────────────
-
 eventBus.on('loan.closed', 'audit:loan.closed', async (payload) => {
     await prisma.audit_logs.create({
         data: {
@@ -256,7 +237,7 @@ eventBus.on('loan.closed', 'audit:loan.closed', async (payload) => {
             entity_type: 'loan_account',
             entity_id: payload.loanAccountId,
             user_id: payload.userId,
-            request_id: payload.requestId,
+            request_id: payload.requestId ?? `event:loan.closed:${payload.loanAccountId}`,
             after_state: JSON.stringify({ closedAt: payload.closedAt }),
             created_at: new Date(),
         },
@@ -264,12 +245,8 @@ eventBus.on('loan.closed', 'audit:loan.closed', async (payload) => {
 });
 
 eventBus.on('loan.closed', 'collections:close-case', async (payload) => {
-    // Close any open collection case for this loan
     await prisma.collection_cases.updateMany({
-        where: {
-            loan_account_id: payload.loanAccountId,
-            status: 'OPEN',
-        },
+        where: { loan_account_id: payload.loanAccountId, status: 'OPEN' },
         data: {
             status: 'CLOSED',
             closed_at: new Date(),

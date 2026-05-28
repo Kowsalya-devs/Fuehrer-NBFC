@@ -205,9 +205,10 @@ export const loansService = {
 
         const application = await loansRepository.createApplication({
             ...input,
+            amountRequested: input.amount,
             appliedAt: new Date(),
         });
-
+        
         setAuditContext(req, {
             action: AUDIT_ACTION.LOAN_CREATED,
             entityType: 'loan_application',

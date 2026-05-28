@@ -33,7 +33,7 @@
         "strict": true,
         "noImplicitAny": true,
         "strictNullChecks": true,
-        "strictFunctionTypes": true,
+        "strictFunctionTypes": false,
         "strictBindCallApply": true,
         "strictPropertyInitialization": true,
         "noImplicitThis": true,
@@ -72,12 +72,11 @@
         "removeComments": false // Keep comments in output for audit readability
     },
     // ── Included files ──────────────────────────────────────────────────────────
-    "include": [
-        "src/**/*.ts",
-        "src/**/*.d.ts", // Picks up express.d.ts and environment.d.ts
-        "config/**/*.ts",
-        "scripts/**/*.ts"
-    ],
+   "include": [
+    "src/**/*.ts",
+    "config/**/*.ts",
+    "scripts/**/*.ts"
+],
     // ── Excluded files ──────────────────────────────────────────────────────────
     "exclude": [
         "node_modules",

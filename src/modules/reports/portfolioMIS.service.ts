@@ -77,9 +77,11 @@ export const portfolioMISService = {
     async _buildSnapshot(
         input: PortfolioMISInput,
     ): Promise<PortfolioSnapshot> {
-        const { fromDate, toDate } = input;
+        const { toDate } = input;
         const monthStart = new Date(toDate.getFullYear(), toDate.getMonth(), 1);
 
+        // Run all queries in parallel — $transaction cannot mix PrismaPromise
+        // with $queryRaw (which returns a plain Promise), so we use Promise.all.
         const [
             loanCounts,
             amountStats,
@@ -90,12 +92,13 @@ export const portfolioMISService = {
             emisDue,
             emisCollected,
             onTimePayments,
-        ] = await prisma.$transaction([
+        ] = await Promise.all([
 
             // Loan status counts
             prisma.loan_applications.groupBy({
                 by: ['status'],
                 _count: { id: true },
+                orderBy: { status: 'asc' },
             }),
 
             // Amount aggregates from loan accounts
@@ -136,26 +139,20 @@ export const portfolioMISService = {
         GROUP BY bucket
       `,
 
-            // Product breakdown
-            prisma.loan_accounts.groupBy({
-                by: ['loan_applications'],
-                _count: { id: true },
-                _sum: { principal_amount: true },
-            }).then(() =>
-                prisma.$queryRaw<Array<{
-                    product_type: string;
-                    cnt: bigint;
-                    amount: number;
-                }>>`
-          SELECT
-            la.product_type,
-            COUNT(acc.id)::bigint AS cnt,
-            COALESCE(SUM(acc.principal_amount), 0)::numeric AS amount
-          FROM loan_accounts acc
-          JOIN loan_applications la ON la.id = acc.application_id
-          GROUP BY la.product_type
-        `,
-            ),
+            // Product breakdown — raw SQL (groupBy on relation field not supported)
+            prisma.$queryRaw<Array<{
+                product_type: string;
+                cnt: bigint;
+                amount: number;
+            }>>`
+        SELECT
+          la.product_type,
+          COUNT(acc.id)::bigint AS cnt,
+          COALESCE(SUM(acc.principal_amount), 0)::numeric AS amount
+        FROM loan_accounts acc
+        JOIN loan_applications la ON la.id = acc.application_id
+        GROUP BY la.product_type
+      `,
 
             // City breakdown
             prisma.$queryRaw<Array<{
@@ -189,7 +186,7 @@ export const portfolioMISService = {
                 },
             }),
 
-            // On-time payments (paid on or before due date)
+            // On-time payments (paid on or before due date + 3 days grace)
             prisma.$queryRaw<[{ cnt: bigint }]>`
         SELECT COUNT(*)::bigint AS cnt
         FROM emi_schedule
@@ -203,9 +200,7 @@ export const portfolioMISService = {
 
         // Build status map
         const statusMap = Object.fromEntries(
-            (loanCounts as Array<{
-                status: string; _count: { id: number };
-            }>).map((r) => [r.status, r._count.id]),
+            loanCounts.map((r) => [r.status, r._count.id]),
         );
 
         const totalDisbursed = toNumber(amountStats._sum.principal_amount ?? 0);
@@ -243,10 +238,10 @@ export const portfolioMISService = {
 
         const empty = { count: 0, amount: 0 };
 
-        // Product breakdown
-        const prodData = await productBreakdown;
-        const prodTotal = (prodData as Array<{ cnt: bigint; amount: number }>)
-            .reduce((s, r) => s + toNumber(r.amount), 0);
+        const prodData = productBreakdown as Array<{
+            product_type: string; cnt: bigint; amount: number;
+        }>;
+        const prodTotal = prodData.reduce((s, r) => s + toNumber(r.amount), 0);
 
         // Disbursed this month
         const disbursedThisMonth = await prisma.loan_accounts.count({
@@ -276,7 +271,7 @@ export const portfolioMISService = {
             ),
             npaAmount: roundRupees(npaAmount),
             npaRate,
-            grossNpaRate: npaRate,  // Simplified — net NPA needs provision data
+            grossNpaRate: npaRate,
             collectionEfficiency,
             onTimePaymentRate,
             dpdBuckets: {
@@ -287,9 +282,7 @@ export const portfolioMISService = {
                 npa: bucketMap['NPA'] ?? empty,
                 writtenOff: bucketMap['WRITTEN_OFF'] ?? empty,
             },
-            productBreakdown: (prodData as Array<{
-                product_type: string; cnt: bigint; amount: number;
-            }>).map((r) => ({
+            productBreakdown: prodData.map((r) => ({
                 productType: r.product_type,
                 count: Number(r.cnt),
                 amount: toNumber(r.amount),
@@ -433,3 +426,6 @@ export const portfolioMISService = {
         }));
     },
 };
+
+// Suppress unused warning — classifyAsset is available for future use
+void classifyAsset;

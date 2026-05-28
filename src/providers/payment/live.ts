@@ -19,17 +19,12 @@ import type {
 const log = createModuleLogger('payment:razorpay');
 
 export class RazorpayProvider implements IPaymentProvider {
-    private readonly rzp: Razorpay;
-    private readonly webhookSecret: string;
-    private readonly accountNumber: string;
+    private readonly rzp:            Razorpay;
+    private readonly webhookSecret:  string;
+    private readonly accountNumber:  string;
 
-    constructor(
-        keyId: string,
-        keySecret: string,
-        webhookSecret: string,
-        accountNumber: string,
-    ) {
-        this.rzp = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    constructor(keyId: string, keySecret: string, webhookSecret: string, accountNumber: string) {
+        this.rzp           = new Razorpay({ key_id: keyId, key_secret: keySecret });
         this.webhookSecret = webhookSecret;
         this.accountNumber = accountNumber;
     }
@@ -39,28 +34,29 @@ export class RazorpayProvider implements IPaymentProvider {
             vendor: 'razorpay',
             fn: async () => {
                 try {
+                    // Cast to unknown first to bypass Razorpay SDK type mismatch for eNACH orders
                     const res = await this.rzp.orders.create({
-                        amount: Math.round(input.maxAmount * 100), // paise
+                        amount:   Math.round(input.maxAmount * 100),
                         currency: 'INR',
-                        method: 'emandate',
+                        method:   'emandate',
                         bank_account: {
                             beneficiary_name: input.customerName,
-                            account_number: input.bankAccount,
-                            account_type: 'savings',
-                            ifsc_code: input.ifsc,
+                            account_number:   input.bankAccount,
+                            account_type:     'savings',
+                            ifsc_code:        input.ifsc,
                         },
                         emandate: {
-                            auth_type: 'netbanking',
+                            auth_type:          'netbanking',
                             max_payment_amount: Math.round(input.maxAmount * 100),
                         },
                         notes: { loanAccountId: input.loanAccountId },
-                    } as Parameters<typeof this.rzp.orders.create>[0]);
+                    } as unknown as Parameters<typeof this.rzp.orders.create>[0]);
 
                     return {
-                        mandateId: res.id,
+                        mandateId:        res.id,
                         registrationLink: (res as unknown as { short_url: string }).short_url ?? '',
-                        status: res.status,
-                        rawResponse: res,
+                        status:           res.status,
+                        rawResponse:      res,
                     };
                 } catch (err) {
                     throw PAYMENT_ERRORS.mandateCreationFailed(err);
@@ -75,22 +71,24 @@ export class RazorpayProvider implements IPaymentProvider {
             vendor: 'razorpay',
             fn: async () => {
                 try {
+                    // Cast to unknown first to bypass Razorpay SDK type mismatch for recurring payments
                     const res = await this.rzp.payments.createRecurringPayment({
-                        email: 'noreply@feuhrer.in',
-                        contact: '0000000000',
-                        amount: Math.round(input.amount * 100),
-                        currency: 'INR',
-                        order_id: input.mandateId,
-                        description: input.description,
-                        recurring: 1,
+                        email:           'noreply@feuhrer.in',
+                        contact:         '0000000000',
+                        amount:          Math.round(input.amount * 100),
+                        currency:        'INR',
+                        order_id:        input.mandateId,
+                        description:     input.description,
+                        recurring:       1,
                         recurring_token: { max_payment_amount: Math.round(input.amount * 100) },
-                    } as Parameters<typeof this.rzp.payments.createRecurringPayment>[0]);
+                    } as unknown as Parameters<typeof this.rzp.payments.createRecurringPayment>[0]);
 
+                    const r = res as unknown as { id: string; status: string };
                     return {
-                        paymentId: res.id,
-                        status: res.status === 'captured' ? 'SUCCESS'
-                            : res.status === 'failed' ? 'FAILED'
-                                : 'PENDING',
+                        paymentId: r.id,
+                        status:    r.status === 'captured' ? 'SUCCESS'
+                                 : r.status === 'failed'   ? 'FAILED'
+                                 : 'PENDING',
                         rawResponse: res,
                     };
                 } catch (err: any) {
@@ -98,7 +96,7 @@ export class RazorpayProvider implements IPaymentProvider {
                     throw PAYMENT_ERRORS.debitFailed(code, err?.error?.description);
                 }
             },
-            retry: { maxAttempts: 1 }, // Never auto-retry debits — retry handled by job
+            retry: { maxAttempts: 1 },
         });
     }
 
@@ -107,7 +105,6 @@ export class RazorpayProvider implements IPaymentProvider {
             vendor: 'razorpay',
             fn: async () => {
                 try {
-                    // Razorpay Payouts API
                     const res = await (this.rzp as unknown as {
                         payouts: {
                             create(data: unknown): Promise<{
@@ -121,31 +118,28 @@ export class RazorpayProvider implements IPaymentProvider {
                         fund_account: {
                             account_type: 'bank_account',
                             bank_account: {
-                                name: input.accountName,
-                                ifsc: input.ifsc,
+                                name:           input.accountName,
+                                ifsc:           input.ifsc,
                                 account_number: input.accountNumber,
                             },
-                            contact: {
-                                name: input.accountName,
-                                type: 'vendor',
-                            },
+                            contact: { name: input.accountName, type: 'vendor' },
                         },
-                        amount: Math.round(input.amount * 100),
-                        currency: 'INR',
-                        mode: 'IMPS',
-                        purpose: 'payout',
-                        queue_if_low_balance: true,
-                        reference_id: input.referenceId,
-                        narration: input.purpose,
+                        amount:                Math.round(input.amount * 100),
+                        currency:              'INR',
+                        mode:                  'IMPS',
+                        purpose:               'payout',
+                        queue_if_low_balance:  true,
+                        reference_id:          input.referenceId,
+                        narration:             input.purpose,
                     });
 
                     return {
-                        payoutId: res.id,
+                        payoutId:  res.id,
                         utrNumber: res.utr ?? null,
-                        status: res.status === 'processed' ? 'DONE'
-                            : res.status === 'queued' ? 'QUEUED'
-                                : res.status === 'processing' ? 'PROCESSING'
-                                    : 'FAILED',
+                        status:    res.status === 'processed'  ? 'DONE'
+                                 : res.status === 'queued'     ? 'QUEUED'
+                                 : res.status === 'processing' ? 'PROCESSING'
+                                 : 'FAILED',
                         rawResponse: res,
                     };
                 } catch (err) {
@@ -161,32 +155,27 @@ export class RazorpayProvider implements IPaymentProvider {
             vendor: 'razorpay',
             fn: async () => {
                 try {
-                    const expiresAt = new Date(
-                        Date.now() + input.expiryMinutes * 60 * 1000,
-                    );
+                    const expiresAt = new Date(Date.now() + input.expiryMinutes * 60 * 1000);
                     const res = await (this.rzp as unknown as {
                         paymentLink: {
                             create(data: unknown): Promise<{
-                                id: string;
+                                id:        string;
                                 short_url: string;
                             }>;
                         };
                     }).paymentLink.create({
-                        amount: Math.round(input.amount * 100),
-                        currency: 'INR',
+                        amount:      Math.round(input.amount * 100),
+                        currency:    'INR',
                         description: input.description,
-                        customer: {
-                            name: input.customerName,
-                            contact: input.customerPhone,
-                        },
-                        notify: { sms: true, email: false },
-                        expire_by: Math.floor(expiresAt.getTime() / 1000),
-                        notes: { emiId: input.emiId },
+                        customer:    { name: input.customerName, contact: input.customerPhone },
+                        notify:      { sms: true, email: false },
+                        expire_by:   Math.floor(expiresAt.getTime() / 1000),
+                        notes:       { emiId: input.emiId },
                     });
 
                     return {
-                        linkId: res.id,
-                        shortUrl: res.short_url,
+                        linkId:      res.id,
+                        shortUrl:    res.short_url,
                         expiresAt,
                         rawResponse: res,
                     };
@@ -204,7 +193,6 @@ export class RazorpayProvider implements IPaymentProvider {
                 .createHmac('sha256', this.webhookSecret)
                 .update(rawBody)
                 .digest('hex');
-            // Constant-time comparison — prevents timing attacks
             return crypto.timingSafeEqual(
                 Buffer.from(expected, 'hex'),
                 Buffer.from(signature, 'hex'),
