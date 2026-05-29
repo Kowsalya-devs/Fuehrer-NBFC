@@ -1,0 +1,19 @@
+module.exports = {
+  OTP_EXPIRY_MINUTES: 10,
+  OTP_LENGTH: 6,
+  JWT_EXPIRES_IN: '7d',
+  KYC_STATUS: {
+    PENDING: 'PENDING',
+    VERIFIED: 'VERIFIED',
+    FAILED: 'FAILED',
+  },
+  ESIGN_STATUS: {
+    PENDING: 'PENDING',
+    SIGNED: 'SIGNED',
+  },
+  ENACH_STATUS: {
+    PENDING: 'PENDING',
+    ACTIVE: 'ACTIVE',
+    FAILED: 'FAILED',
+  },
+};

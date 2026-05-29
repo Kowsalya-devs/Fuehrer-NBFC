@@ -1,0 +1,46 @@
+# .github/workflows/pr-checks.yml
+# Fast checks that run on every PR commit for immediate feedback.
+# Completes in under 2 minutes.
+
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited]
+
+jobs:
+  pr-title:
+    name: PR title format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title follows Conventional Commits
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            chore
+            refactor
+            test
+            perf
+            ci
+          requireScope: false
+
+  size-check:
+    name: PR size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check PR size
+        run: |
+          CHANGED=$(git diff --stat origin/${{ github.base_ref }}...HEAD | \
+            tail -1 | awk '{print $4}')
+          echo "Lines changed: ${CHANGED:-0}"
+          if [ "${CHANGED:-0}" -gt "2000" ]; then
+            echo "PR changes ${CHANGED} lines — consider splitting into smaller PRs"
+          fi

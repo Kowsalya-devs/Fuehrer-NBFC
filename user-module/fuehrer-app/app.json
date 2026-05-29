@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "TrustNBFC",
+    "slug": "trustnbfc-mobile",
+    "scheme": "trustnbfc",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#1A56FF"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TrustNBFC needs access to your photos to upload KYC documents and income proof."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TrustNBFC uses your camera to capture documents and selfies for KYC verification."
+        }
+      ]
+    ],
+    "android": {
+      "package": "com.fuehrer.trustnbfc",
+      "permissions": [
+        "CAMERA",
+        "POST_NOTIFICATIONS",
+        "READ_MEDIA_IMAGES"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.fuehrer.trustnbfc",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSUserTrackingUsageDescription": "TrustNBFC uses device capabilities only to improve your loan application and servicing experience."
+      }
+    }
+  }
+}

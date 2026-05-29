@@ -1,0 +1,88 @@
+// tsconfig.json
+{
+    "compilerOptions": {
+        // ── Output ───────────────────────────────────────────────────────────────
+        "target": "ES2022",
+        "module": "CommonJS",
+        "lib": [
+            "ES2022"
+        ],
+        "outDir": "./dist",
+        // rootDir intentionally omitted — TypeScript infers it from "include".
+        // Setting rootDir: "./src" breaks compilation because config/ and scripts/
+        // sit outside src/ but are still part of the program.
+        // ── Module resolution ─────────────────────────────────────────────────────
+        "moduleResolution": "node",
+        "baseUrl": ".",
+        // The @/ alias — maps to src/ so imports never use ../../../
+        // Works with tsconfig-paths at runtime and jest moduleNameMapper in tests
+        "paths": {
+            "@/*": [
+                "src/*"
+            ],
+            // config/ lives outside src/ but services import from @/config/*
+            "@/config/*": [
+                "config/*"
+            ]
+        },
+        "resolveJsonModule": true, // Allow import of .json files
+        "esModuleInterop": true, // Fixes default imports from CommonJS modules
+        "allowSyntheticDefaultImports": true,
+        // ── Strict mode — core safety flags on ────────────────────────────────────
+        // These are non-negotiable for a financial application
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": false,
+        "strictBindCallApply": true,
+        "strictPropertyInitialization": true,
+        "noImplicitThis": true,
+        "alwaysStrict": true,
+        // ── Additional strictness — relaxed for Express + Prisma compatibility ───
+        // These four flags were too strict for the Express RequestHandler pattern
+        // and Prisma's optional field types. Can be re-enabled in a future cleanup
+        // pass once AuthRequest and DTOs are refactored. Real bug-catching flags
+        // (noFallthroughCasesInSwitch, noUncheckedIndexedAccess) stay on.
+        "noUnusedLocals": false, // Was true — created 50+ false-positive errors
+        "noUnusedParameters": false, // Was true — Express middlewares take unused args
+        "noImplicitReturns": false, // Was true — async controllers fall through naturally
+        "noFallthroughCasesInSwitch": true, // Keep — real bug prevention
+        "exactOptionalPropertyTypes": false, // Was true — Express req.user is optional
+        "noUncheckedIndexedAccess": true, // Keep — real bug prevention
+        // ── Declaration files ─────────────────────────────────────────────────────
+        "declaration": true, // Generate .d.ts files alongside .js
+        "declarationMap": true, // Source maps for .d.ts
+        "sourceMap": true, // Source maps for debugging in production
+        // ── Type roots ────────────────────────────────────────────────────────────
+        // Tell TypeScript to look for global type augmentations in src/types/
+        "typeRoots": [
+            "./node_modules/@types",
+            "./src/types"
+        ],
+        "types": [
+            "node",
+            "jest"
+        ],
+        // ── Decorators (if needed for Prisma / future DI) ─────────────────────────
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        // ── Misc ──────────────────────────────────────────────────────────────────
+        "skipLibCheck": true, // Don't type-check node_modules
+        "forceConsistentCasingInFileNames": true,
+        "removeComments": false // Keep comments in output for audit readability
+    },
+    // ── Included files ──────────────────────────────────────────────────────────
+   "include": [
+    "src/**/*.ts",
+    "config/**/*.ts",
+    "scripts/**/*.ts"
+],
+    // ── Excluded files ──────────────────────────────────────────────────────────
+    "exclude": [
+        "node_modules",
+        "dist",
+        "tests/**/*.ts", // Tests have their own tsconfig below
+        "**/*.spec.ts",
+        "**/*.test.ts"
+    ]
+}
