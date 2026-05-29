@@ -123,6 +123,7 @@ export interface ListLoansInput extends PaginationParams {
 
 export interface LoanApplicationResponse {
     id: string;
+    referenceNumber: string;
     status: LoanStatus;
     amountRequested: Rupees;
     approvedAmount: Rupees | null;

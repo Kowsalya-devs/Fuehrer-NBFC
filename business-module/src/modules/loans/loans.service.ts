@@ -104,8 +104,14 @@ function toApplicationResponse(
         ? calculateEmi(app.approvedAmount, app.interestRate, app.tenureMonths)
         : null;
 
+    // Generate FHR-YYYY-NNNNN reference from UUID last 5 chars
+    const year = new Date(app.appliedAt).getFullYear();
+    const shortRef = app.id.replace(/-/g, '').slice(-5).toUpperCase();
+    const referenceNumber = `FHR-${year}-${shortRef}`;
+
     return {
         id: app.id,
+        referenceNumber,
         status: app.status,
         amountRequested: app.amountRequested,
         approvedAmount: app.approvedAmount,
@@ -121,6 +127,21 @@ function toApplicationResponse(
         appliedAt: app.appliedAt,
         updatedAt: app.updatedAt,
         reviewedAt: app.reviewedAt,
+
+        // Address fields
+        flatHouseNo:    app.flatHouseNo    ?? null,
+        streetArea:     app.streetArea     ?? null,
+        city:           app.city           ?? null,
+        pincode:        app.pincode        ?? null,
+        state:          app.state          ?? null,
+
+        // Employment fields
+        employmentType: app.employmentType ?? null,
+        employerName:   app.employerName   ?? null,
+        monthlyIncome:  app.monthlyIncome  ?? null,
+
+        // Repayment type
+        repaymentType:  app.repaymentType  ?? 'MONTHLY_EMI',
     };
 }
 

@@ -31,6 +31,18 @@ router.get(
     loansController.emiPreview,
 );
 
+// Gold loan rate — no auth needed (used on Gold Loan Estimator screen)
+router.get(
+    '/gold/rate',
+    loansController.goldRate,
+);
+
+// Gold loan estimator — calculate max loan from weight + purity
+router.get(
+    '/gold/estimate',
+    loansController.goldEstimate,
+);
+
 // ─── Customer routes ──────────────────────────────────────────────────────────
 
 // Create new loan application

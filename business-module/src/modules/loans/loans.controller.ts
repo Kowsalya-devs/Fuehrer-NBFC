@@ -80,7 +80,6 @@ export const loansController = {
             const user = getAuthUser(req);
             const query = getValidatedQuery<ListLoansInput>(req);
 
-            // Customers only see their own — staff can filter by userId
             const filters: ListLoansInput = {
                 ...query,
                 userId: user.role === ROLE.CUSTOMER ? user.id : query.userId,
@@ -151,6 +150,87 @@ export const loansController = {
                 user.id, req.query,
             );
             res.status(HTTP.OK).json(paginatedResponse(result));
+        } catch (err) { next(err); }
+    },
+
+    // GET /loans/gold/rate
+    async goldRate(_req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const result = {
+                ratePerGram: 6200,
+                purityRates: {
+                    '18K': Math.round(6200 * 0.750),
+                    '20K': Math.round(6200 * 0.833),
+                    '22K': Math.round(6200 * 0.916),
+                    '24K': Math.round(6200 * 0.999),
+                },
+                maxLtvPercent: 75,
+                currency: 'INR',
+                updatedAt: new Date().toISOString(),
+                source: 'IBJA',
+                note: 'Rate is indicative. Final value subject to physical assessment.',
+            };
+            res.status(HTTP.OK).json({ success: true, data: result });
+        } catch (err) { next(err); }
+    },
+
+    // GET /loans/gold/estimate?goldType=JEWELLERY&purityKarat=22&weightGrams=10
+    async goldEstimate(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const { goldType, purityKarat, weightGrams } = req.query as Record<string, string>;
+
+            const purityMap: Record<string, number> = {
+                '18': 0.750,
+                '20': 0.833,
+                '22': 0.916,
+                '24': 0.999,
+            };
+
+            const ratePerGram = 6200;
+            const purity = purityMap[purityKarat] ?? 0.916;
+            const weight = parseFloat(weightGrams ?? '0');
+            const estimatedGoldValue = Math.round(ratePerGram * purity * weight);
+            const maxLoan = Math.round(estimatedGoldValue * 0.75);
+
+            const result = {
+                goldType:          goldType ?? 'JEWELLERY',
+                purityKarat:       purityKarat ?? '22',
+                weightGrams:       weight,
+                ratePerGram,
+                estimatedGoldValue,
+                maxLoan,
+                maxLtvPercent:     75,
+                currency:          'INR',
+                note: 'Final value subject to physical assessment at branch.',
+            };
+
+            res.status(HTTP.OK).json({ success: true, data: result });
+        } catch (err) { next(err); }
+    },
+
+    // GET /loans/mandate/preview?loanAccountId=XXX
+    async mandatePreview(req: AuthRequest, res: Response, next: NextFunction) {
+        try {
+            const user = getAuthUser(req);
+            const { loanAccountId } = req.query as Record<string, string>;
+
+            const account = await loansService.getLoanAccount(
+                loanAccountId, user.id, user.role,
+            );
+
+            const result = {
+                loanAccountId:  account.id,
+                accountNumber:  account.accountNumber,
+                monthlyEmi:     account.monthlyEmi,
+                debitDay:       5,
+                maxAmount:      Math.round(account.monthlyEmi * 1.3),
+                currency:       'INR',
+                mandateType:    'E_NACH',
+                frequency:      'MONTHLY',
+                note:           'Auto-debit will be initiated on the 5th of every month.',
+            };
+
+            res.status(HTTP.OK).json({ success: true, data: result });
         } catch (err) { next(err); }
     },
 };
