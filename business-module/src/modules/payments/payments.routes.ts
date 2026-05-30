@@ -88,4 +88,40 @@ router.get(
     paymentsController.getOne,
 );
 
+// ─── Frontend alias routes ────────────────────────────────────────────────────
+
+// POST /payments/process → process EMI payment
+router.post(
+    '/process',
+    requireAuth(),
+    allowRoles(ROLE.CUSTOMER),
+    paymentsController.createPaymentLink,
+);
+
+// GET /payments/history/:loanId
+router.get(
+    '/history/:loanAccountId',
+    requireAuth(),
+    validateParams(loanAccountIdParamSchema),
+    validateQuery(listPaymentsSchema),
+    paymentsController.listByAccount,
+);
+
+// POST /payments/nach
+router.post(
+    '/nach',
+    requireAuth(),
+    allowRoles(ROLE.CUSTOMER),
+    validateBody(createMandateSchema),
+    paymentsController.createMandate,
+);
+
+// GET /payments/:paymentId/status
+router.get(
+    '/:paymentId/status',
+    requireAuth(),
+    validateParams(paymentIdParamSchema),
+    paymentsController.getOne,
+);
+
 export { router as paymentsRouter };

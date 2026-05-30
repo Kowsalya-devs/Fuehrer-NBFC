@@ -1,4 +1,6 @@
 // src/app.ts
+import { profileRouter } from '@/modules/profile';
+import { notificationsRouter } from '@/modules/notifications/notifications.routes';
 import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -15,6 +17,7 @@ import {
 import { bootstrapEventHandlers } from '@/events';
 
 // ── Module routers ─────────────────────────────────────────────────────────────
+import { authRouter } from '@/modules/auth';
 import { healthRouter } from '@/modules/health';
 import { webhooksRouter } from '@/modules/webhooks';
 import { kycRouter } from '@/modules/kyc';
@@ -43,20 +46,15 @@ export function createApp(): express.Application {
     app.use(corsMiddleware);
 
     // ── 3. Request logger ──────────────────────────────────────────────────────
-    // Attaches requestId, requestLogger, startTime to every req
     app.use(requestLogger());
 
     // ── 4. Rate limiter ────────────────────────────────────────────────────────
     app.use(generalLimiter);
 
     // ── 5. Health — no auth, no body parsing ──────────────────────────────────
-    // Mounted before json() so App Runner probes never touch the JSON parser
     app.use('/health', healthRouter);
 
     // ── 6. Webhooks — MUST be before express.json() ───────────────────────────
-    // rawBodyCapture in webhooks.routes reads the raw stream.
-    // express.json() would consume the stream first — signature verification
-    // would fail because rawBody would be empty.
     app.use(`${api}/webhooks`, webhooksRouter);
 
     // ── 7. Body parsing ────────────────────────────────────────────────────────
@@ -65,21 +63,18 @@ export function createApp(): express.Application {
     app.use(compression());
 
     // ── 8. JWT verification ────────────────────────────────────────────────────
-    // Runs globally — attaches req.user if token present.
-    // Does NOT reject unauthenticated requests — individual routes do that
-    // via requireAuth() + allowRoles() middleware.
     app.use(verifyToken());
 
     // ── 9. Audit trail ─────────────────────────────────────────────────────────
-    // Listens on res.finish — must be before routes so it can see every response
     app.use(auditTrail());
 
     // ── 10. Bootstrap event + notification handlers ───────────────────────────
-    // Registers all eventBus listeners. Idempotent — safe to call multiple
-    // times but only registers once due to the singleton event bus.
     bootstrapEventHandlers();
 
     // ── 11. Domain routes ──────────────────────────────────────────────────────
+    app.use('/auth', authRouter);
+    app.use('/user', profileRouter);
+app.use('/notifications', notificationsRouter);
     app.use(`${api}/kyc`, kycRouter);
     app.use(`${api}/loans`, loansRouter);
     app.use(`${api}/emi`, emiRouter);
@@ -92,10 +87,10 @@ export function createApp(): express.Application {
     app.use(`${api}/reports`, reportsRouter);
     app.use(`${api}/admin`, adminRouter);
 
-    // ── 12. 404 handler — after all routes ────────────────────────────────────
+    // ── 12. 404 handler ────────────────────────────────────────────────────────
     app.use(notFoundHandler());
 
-    // ── 13. Global error handler — MUST be last, MUST have 4 params ──────────
+    // ── 13. Global error handler ───────────────────────────────────────────────
     app.use(errorHandler());
 
     return app;

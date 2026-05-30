@@ -17,7 +17,6 @@ export interface LoanApplication {
     purpose: string;
     storeName: string;
     storeCity: string;
-    repaymentType: string;
 
     // Approval details — populated by credit manager
     approvedAmount: Rupees | null;
@@ -71,21 +70,6 @@ export interface CreateLoanApplicationInput {
     purpose: string;
     storeName: string;
     storeCity: string;
-
-    // Address fields — Step 2 of loan application screen
-    flatHouseNo?: string;
-    streetArea?: string;
-    city?: string;
-    pincode?: string;
-    state?: string;
-
-    // Employment fields — Step 2 of loan application screen
-    employmentType?: 'SALARIED' | 'SELF_EMPLOYED' | 'BUSINESS_OWNER';
-    employerName?: string;
-    monthlyIncome?: number;
-
-    // Repayment type — from Loan Amount & Tenure screen
-    repaymentType?: 'MONTHLY_EMI' | 'INTEREST_ONLY' | 'BULLET';
 }
 
 export interface SubmitLoanApplicationInput {
@@ -123,7 +107,6 @@ export interface ListLoansInput extends PaginationParams {
 
 export interface LoanApplicationResponse {
     id: string;
-    referenceNumber: string;
     status: LoanStatus;
     amountRequested: Rupees;
     approvedAmount: Rupees | null;
@@ -139,21 +122,6 @@ export interface LoanApplicationResponse {
     appliedAt: Date;
     updatedAt: Date;
     reviewedAt: Date | null;
-
-    // Address fields
-    flatHouseNo: string | null;
-    streetArea: string | null;
-    city: string | null;
-    pincode: string | null;
-    state: string | null;
-
-    // Employment fields
-    employmentType: string | null;
-    employerName: string | null;
-    monthlyIncome: number | null;
-
-    // Repayment type
-    repaymentType: string;
 }
 
 export interface LoanAccountResponse {

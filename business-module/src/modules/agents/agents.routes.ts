@@ -192,4 +192,30 @@ router.post(
     agentsController.processPayout,
 );
 
+// ─── Frontend alias routes ─────────────────────────────────────────────────────
+
+// GET /agent/loans → agent's assigned loans
+router.get(
+    '/agent/loans',
+    requireAuth(),
+    allowRoles(ROLE.AGENT),
+    agentsController.getMe,
+);
+
+// GET /agent/overdue → overdue accounts for agent
+router.get(
+    '/agent/overdue',
+    requireAuth(),
+    allowRoles(ROLE.AGENT),
+    agentsController.myDashboard,
+);
+
+// GET /agent/dashboard
+router.get(
+    '/agent/dashboard',
+    requireAuth(),
+    allowRoles(ROLE.AGENT),
+    agentsController.myDashboard,
+);
+
 export { router as agentsRouter };

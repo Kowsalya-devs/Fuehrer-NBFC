@@ -18,7 +18,7 @@ import {
     loanIdParamSchema,
 } from './loans.dto';
 import { commonSchemas } from '@/middlewares';
-import { ROLE } from '@/config/constants';
+import { ROLE, HTTP } from '@/config/constants';
 
 const router = Router();
 
@@ -163,6 +163,38 @@ router.post(
     validateParams(loanIdParamSchema),
     validateBody(rejectLoanSchema),
     loansController.reject,
+);
+
+// ─── Frontend alias routes (flat paths) ──────────────────────────────────────
+
+// POST /loans/apply → POST /loans (frontend uses this path)
+router.post(
+    '/apply',
+    requireAuth(),
+    allowRoles(ROLE.CUSTOMER, ROLE.AGENT),
+    loanApplicationLimiter,
+    validateBody(createLoanSchema),
+    loansController.create,
+);
+
+// GET /loans/:loanId/summary
+router.get(
+    '/:id/summary',
+    requireAuth(),
+    validateParams(loanIdParamSchema),
+    loansController.getOne,
+);
+
+// POST /loans/gold/notify — register interest for Gold Loan launch
+router.post(
+    '/gold/notify',
+    requireAuth(),
+    (_req, res) => {
+        res.status(HTTP.OK).json({
+            success: true,
+            message: 'You will be notified when Gold Loans launch.',
+        });
+    },
 );
 
 export { router as loansRouter };
